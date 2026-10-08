@@ -1,0 +1,41 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="${mod_license}"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="Pergament / Пергамент"
+logoFile="pergament_logo.png"
+authors="${mod_authors}"
+description='''Parchment world map and minimap. Only what you explored yourself, in real block colors.
+Markers, paths, ruler, pen, death markers, Xaero's World Map import, FTB Teams map and ore sharing.
+
+Бумажная карта мира и миникарта: только то, что разведал сам, настоящими цветами блоков.
+Метки, тропы, линейка, перо, метки гибели, импорт из Xaero's World Map, обмен картой и рудами в команде FTB Teams.'''
+
+[[dependencies.${mod_id}]]
+    modId="forge"
+    mandatory=true
+    versionRange="${forge_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"
+[[dependencies.${mod_id}]]
+    modId="ftbteams"
+    mandatory=false
+    versionRange="[2001,)"
+    ordering="NONE"
+    side="BOTH"
+[[dependencies.${mod_id}]]
+    modId="gtceu"
+    mandatory=false
+    versionRange="[1.0,)"
+    ordering="NONE"
+    side="BOTH"

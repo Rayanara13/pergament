@@ -1,0 +1,362 @@
+[
+ {
+  "id": "pin_red",
+  "ru": "Красная булавка",
+  "group": "Основные",
+  "gkey": "basic"
+ },
+ {
+  "id": "pin_blue",
+  "ru": "Синяя булавка",
+  "group": "Основные",
+  "gkey": "basic"
+ },
+ {
+  "id": "pin_green",
+  "ru": "Зелёная булавка",
+  "group": "Основные",
+  "gkey": "basic"
+ },
+ {
+  "id": "pin_gold",
+  "ru": "Жёлтая булавка",
+  "group": "Основные",
+  "gkey": "basic"
+ },
+ {
+  "id": "pin_purple",
+  "ru": "Фиолетовая булавка",
+  "group": "Основные",
+  "gkey": "basic"
+ },
+ {
+  "id": "pin_white",
+  "ru": "Белая булавка",
+  "group": "Основные",
+  "gkey": "basic"
+ },
+ {
+  "id": "flag",
+  "ru": "Флаг",
+  "group": "Основные",
+  "gkey": "basic"
+ },
+ {
+  "id": "star",
+  "ru": "Звезда",
+  "group": "Основные",
+  "gkey": "basic"
+ },
+ {
+  "id": "cross",
+  "ru": "Крестик",
+  "group": "Основные",
+  "gkey": "basic"
+ },
+ {
+  "id": "question",
+  "ru": "Вопрос",
+  "group": "Основные",
+  "gkey": "basic"
+ },
+ {
+  "id": "exclaim",
+  "ru": "Внимание",
+  "group": "Основные",
+  "gkey": "basic"
+ },
+ {
+  "id": "heart",
+  "ru": "Сердце",
+  "group": "Основные",
+  "gkey": "basic"
+ },
+ {
+  "id": "house",
+  "ru": "Дом",
+  "group": "Постройки",
+  "gkey": "buildings"
+ },
+ {
+  "id": "castle",
+  "ru": "Крепость",
+  "group": "Постройки",
+  "gkey": "buildings"
+ },
+ {
+  "id": "mine",
+  "ru": "Шахта",
+  "group": "Постройки",
+  "gkey": "buildings"
+ },
+ {
+  "id": "portal",
+  "ru": "Портал",
+  "group": "Постройки",
+  "gkey": "buildings"
+ },
+ {
+  "id": "well",
+  "ru": "Колодец",
+  "group": "Постройки",
+  "gkey": "buildings"
+ },
+ {
+  "id": "bridge",
+  "ru": "Мост",
+  "group": "Постройки",
+  "gkey": "buildings"
+ },
+ {
+  "id": "lighthouse",
+  "ru": "Маяк",
+  "group": "Постройки",
+  "gkey": "buildings"
+ },
+ {
+  "id": "tent",
+  "ru": "Лагерь",
+  "group": "Постройки",
+  "gkey": "buildings"
+ },
+ {
+  "id": "anvil",
+  "ru": "Кузница",
+  "group": "Постройки",
+  "gkey": "buildings"
+ },
+ {
+  "id": "farm",
+  "ru": "Ферма",
+  "group": "Постройки",
+  "gkey": "buildings"
+ },
+ {
+  "id": "bed",
+  "ru": "Ночлег",
+  "group": "Постройки",
+  "gkey": "buildings"
+ },
+ {
+  "id": "trade",
+  "ru": "Торговля",
+  "group": "Постройки",
+  "gkey": "buildings"
+ },
+ {
+  "id": "tree",
+  "ru": "Дерево",
+  "group": "Природа",
+  "gkey": "nature"
+ },
+ {
+  "id": "spruce",
+  "ru": "Ель",
+  "group": "Природа",
+  "gkey": "nature"
+ },
+ {
+  "id": "mountain",
+  "ru": "Гора",
+  "group": "Природа",
+  "gkey": "nature"
+ },
+ {
+  "id": "cave",
+  "ru": "Пещера",
+  "group": "Природа",
+  "gkey": "nature"
+ },
+ {
+  "id": "lake",
+  "ru": "Озеро",
+  "group": "Природа",
+  "gkey": "nature"
+ },
+ {
+  "id": "volcano",
+  "ru": "Вулкан",
+  "group": "Природа",
+  "gkey": "nature"
+ },
+ {
+  "id": "flower",
+  "ru": "Цветы",
+  "group": "Природа",
+  "gkey": "nature"
+ },
+ {
+  "id": "mushroom",
+  "ru": "Грибы",
+  "group": "Природа",
+  "gkey": "nature"
+ },
+ {
+  "id": "desert",
+  "ru": "Пустыня",
+  "group": "Природа",
+  "gkey": "nature"
+ },
+ {
+  "id": "snow",
+  "ru": "Снега",
+  "group": "Природа",
+  "gkey": "nature"
+ },
+ {
+  "id": "pickaxe",
+  "ru": "Копать тут",
+  "group": "Ресурсы",
+  "gkey": "resources"
+ },
+ {
+  "id": "ore_iron",
+  "ru": "Железная руда",
+  "group": "Ресурсы",
+  "gkey": "resources"
+ },
+ {
+  "id": "ore_copper",
+  "ru": "Медная руда",
+  "group": "Ресурсы",
+  "gkey": "resources"
+ },
+ {
+  "id": "ore_tin",
+  "ru": "Оловянная руда",
+  "group": "Ресурсы",
+  "gkey": "resources"
+ },
+ {
+  "id": "ore_gold",
+  "ru": "Золотая руда",
+  "group": "Ресурсы",
+  "gkey": "resources"
+ },
+ {
+  "id": "diamond",
+  "ru": "Алмаз",
+  "group": "Ресурсы",
+  "gkey": "resources"
+ },
+ {
+  "id": "emerald",
+  "ru": "Изумруд",
+  "group": "Ресурсы",
+  "gkey": "resources"
+ },
+ {
+  "id": "ingot_gold",
+  "ru": "Слиток золота",
+  "group": "Ресурсы",
+  "gkey": "resources"
+ },
+ {
+  "id": "ingot_iron",
+  "ru": "Слиток железа",
+  "group": "Ресурсы",
+  "gkey": "resources"
+ },
+ {
+  "id": "coal",
+  "ru": "Уголь",
+  "group": "Ресурсы",
+  "gkey": "resources"
+ },
+ {
+  "id": "crystal",
+  "ru": "Кристаллы",
+  "group": "Ресурсы",
+  "gkey": "resources"
+ },
+ {
+  "id": "skull",
+  "ru": "Смерть",
+  "group": "Опасности",
+  "gkey": "danger"
+ },
+ {
+  "id": "sword",
+  "ru": "Бой",
+  "group": "Опасности",
+  "gkey": "danger"
+ },
+ {
+  "id": "monster",
+  "ru": "Монстры",
+  "group": "Опасности",
+  "gkey": "danger"
+ },
+ {
+  "id": "spider",
+  "ru": "Пауки",
+  "group": "Опасности",
+  "gkey": "danger"
+ },
+ {
+  "id": "fire",
+  "ru": "Огонь",
+  "group": "Опасности",
+  "gkey": "danger"
+ },
+ {
+  "id": "lava",
+  "ru": "Лава",
+  "group": "Опасности",
+  "gkey": "danger"
+ },
+ {
+  "id": "trap",
+  "ru": "Ловушка",
+  "group": "Опасности",
+  "gkey": "danger"
+ },
+ {
+  "id": "boat",
+  "ru": "Лодка",
+  "group": "Транспорт и вещи",
+  "gkey": "transport"
+ },
+ {
+  "id": "cart",
+  "ru": "Повозка",
+  "group": "Транспорт и вещи",
+  "gkey": "transport"
+ },
+ {
+  "id": "chest",
+  "ru": "Сундук",
+  "group": "Транспорт и вещи",
+  "gkey": "transport"
+ },
+ {
+  "id": "book",
+  "ru": "Записки",
+  "group": "Транспорт и вещи",
+  "gkey": "transport"
+ },
+ {
+  "id": "torch",
+  "ru": "Факел",
+  "group": "Транспорт и вещи",
+  "gkey": "transport"
+ },
+ {
+  "id": "key",
+  "ru": "Ключ",
+  "group": "Транспорт и вещи",
+  "gkey": "transport"
+ },
+ {
+  "id": "anchor",
+  "ru": "Пристань",
+  "group": "Транспорт и вещи",
+  "gkey": "transport"
+ },
+ {
+  "id": "fish",
+  "ru": "Рыбалка",
+  "group": "Транспорт и вещи",
+  "gkey": "transport"
+ }
+]
