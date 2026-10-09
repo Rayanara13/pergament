@@ -585,6 +585,13 @@ public class MapScreen extends Screen {
         addRenderableWidget(desc);
         addRenderableWidget(new PaperButton(px, 134, w, T.c("marker.choose_icon"), () -> picker,
                 () -> { picker = true; iconScroll = 0; }));
+        addRenderableWidget(new PaperButton(px, 156, w, Component.literal(""), () -> editing != null && editing.world,
+                () -> { if (editing != null) editing.world = !editing.world; }) {
+            @Override
+            public Component getMessage() {                       // надпись — по текущему состоянию
+                return T.c(editing != null && editing.world ? "marker.world_on" : "marker.world_off");
+            }
+        });
         int by = height - 30, bw = (w - 6) / 2;
         addRenderableWidget(new PaperButton(px, by - 18, bw, T.c("button.save"), () -> false, () -> {
             var ms = LocalMap.get().markers();

@@ -187,6 +187,37 @@ public final class TeamSyncClient {
         return f;
     }
 
+    /**
+     * Карта профиля пополнилась мимо скана (импорт из Xaero): архив снова «не отдан» — во всех командах этого профиля.
+     * Идёт сессия — отдаём сразу; иначе — при следующем входе. Сервер возьмёт только то, чего у команды нет.
+     */
+    public static void archiveAgain(String profile) {
+        if (profile == null) return;
+        Session s = cur;
+        if (s != null && profile.equals(s.profile)) {
+            synchronized (s.state) {
+                s.state.archiveDone = false;
+                s.state.archiveRegions.clear();
+            }
+            s.archiveSent.clear();
+            startArchive(s);
+            Pergament.LOG.info("Пергамент: карта пополнилась — отдаю архив команде заново");
+        }
+        Path dir = WorldProfile.root().resolve("worlds").resolve(profile);
+        try (Stream<Path> fs = Files.list(dir)) {
+            for (Path f : fs.filter(x -> x.getFileName().toString().matches("team_[0-9a-f-]+\\.json")).toList()) {
+                UUID t = UUID.fromString(f.getFileName().toString().substring(5, f.getFileName().toString().length() - 5));
+                if (s != null && profile.equals(s.profile) && t.equals(s.team)) continue;   // текущая — уже выше
+                State st = load(profile, t);
+                st.archiveDone = false;
+                st.archiveRegions.clear();
+                DimMap.onIo(() -> save(profile, t, st));
+            }
+        } catch (Exception e) {
+            Pergament.LOG.warn("Пергамент: состояние команд не обновлено: {}", e.toString());
+        }
+    }
+
     public static void onMark(TeamNet.Mark m) {
         Session s = cur;
         if (s == null || !s.team.equals(m.team())) return;

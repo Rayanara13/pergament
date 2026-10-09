@@ -20,12 +20,18 @@ final class MarkerOverlay {
         return new ResourceLocation(Pergament.MOD_ID, "textures/gui/icon_mk_" + name + ".png");
     }
 
+    /** Сторона значка на карте с учётом настройки размера. */
+    static int size(int base) {
+        return Math.max(4, Math.round(base * ru.stef.pergament.client.PergamentConfig.MARKER_SCALE.get() / 100f));
+    }
+
     static void draw(GuiGraphics g, Font font, MapScreen v, List<Markers.Marker> list, String selectedId) {
+        int s = size(16);
         for (Markers.Marker m : list) {
             int x = (int) Math.round(v.sx(m.x + 0.5)), y = (int) Math.round(v.sy(m.z + 0.5));
-            if (x < -40 || y < -40 || x > v.width + 40 || y > v.height + 40) continue;
-            g.blit(icon(m.icon), x - 8, y - 15, 0, 0, 16, 16, 16, 16);
-            if (m.id.equals(selectedId)) g.renderOutline(x - 10, y - 17, 20, 20, Paper.RED);
+            if (x < -40 - s || y < -40 - s || x > v.width + 40 + s || y > v.height + 40 + s) continue;
+            g.blit(icon(m.icon), x - s / 2, y - s + 1, s, s, 0, 0, 16, 16, 16, 16);
+            if (m.id.equals(selectedId)) g.renderOutline(x - s / 2 - 2, y - s - 1, s + 4, s + 4, Paper.RED);
             if (!m.name.isEmpty() && v.zoomGui() >= 0.25) {
                 int w = font.width(m.name) + 6;
                 g.fill(x - w / 2, y + 2, x - w / 2 + w, y + 2 + font.lineHeight + 2, 0xE6F1E4C0);
@@ -37,9 +43,10 @@ final class MarkerOverlay {
 
     static Markers.Marker hovered(MapScreen v, List<Markers.Marker> list, double mx, double my) {
         Markers.Marker best = null;
-        double bestD = 9 * 9;
+        int s = size(16);
+        double bestD = Math.max(9, s * 0.6) * Math.max(9, s * 0.6);
         for (Markers.Marker m : list) {
-            double dx = v.sx(m.x + 0.5) - mx, dy = v.sy(m.z + 0.5) - 7 - my;     // центр иконки над точкой
+            double dx = v.sx(m.x + 0.5) - mx, dy = v.sy(m.z + 0.5) - s / 2.0 + 1 - my;     // центр иконки над точкой
             if (dx * dx + dy * dy < bestD) {
                 bestD = dx * dx + dy * dy;
                 best = m;

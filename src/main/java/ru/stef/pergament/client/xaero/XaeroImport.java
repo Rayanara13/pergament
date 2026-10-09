@@ -237,6 +237,7 @@ public final class XaeroImport {
         done = true;
         reader.interrupt();
         status = how;
+        if (chunksAdded > 0) ru.stef.pergament.client.TeamSyncClient.archiveAgain(profile);   // импорт — и команде
         Minecraft mc = Minecraft.getInstance();
         String msg = T.t("xaero.msg", how, chunksAdded, chunksKept) + (errors > 0 ? T.t("xaero.errors", errors) : "");
         Pergament.LOG.info(msg);

@@ -246,6 +246,20 @@ public final class SelfTest {
                 mc.setScreen(new MapScreen());
             } else if (onMap == 155) {
                 Screenshot.grab(mc.gameDirectory, "pergament_death.png", mc.getMainRenderTarget(), msg -> { });
+            } else if (onMap == 156 && mc.player != null) {
+                // метка в мире: в 20 блоках по взгляду, с галочкой «в мире»; кадр из игры без экранов
+                var look = mc.player.getLookAngle();
+                var wp = new ru.stef.pergament.client.map.Markers.Marker();
+                wp.name = "Waypoint";
+                wp.icon = "flag";
+                wp.world = true;
+                wp.x = (int) Math.floor(mc.player.getX() + look.x * 20);
+                wp.z = (int) Math.floor(mc.player.getZ() + look.z * 20);
+                wp.y = mc.player.getBlockY();
+                LocalMap.get().markers().put(wp);
+                mc.setScreen(null);
+            } else if (onMap == 159) {
+                Screenshot.grab(mc.gameDirectory, "pergament_waypoint.png", mc.getMainRenderTarget(), msg -> { });
             } else if (onMap == 160 && mc.player != null) {
                 XaeroSelfTest.begin(mc);
             } else if (onMap > 160 && onMap < 1000) {

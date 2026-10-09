@@ -30,7 +30,8 @@ public final class MinimapHud implements IGuiOverlay {
         float zoom = PergamentConfig.MINIMAP_ZOOM.get().floatValue();
         int corner = PergamentConfig.MINIMAP_CORNER.get();      // 0 ↖, 1 ↗, 2 ↙, 3 ↘
         int x0 = (corner & 1) == 0 ? PAD : screenW - PAD - size;
-        int y0 = (corner & 2) == 0 ? PAD : screenH - PAD - size - 12;
+        boolean clock = PergamentConfig.MINIMAP_CLOCK.get();
+        int y0 = (corner & 2) == 0 ? PAD : screenH - PAD - size - 12 - (clock ? 20 : 0);
         int x1 = x0 + size, y1 = y0 + size;
 
         Player p = mc.player;
@@ -65,7 +66,8 @@ public final class MinimapHud implements IGuiOverlay {
             for (var m : marks.all()) {
                 int mx = (int) Math.round(cxs + (m.x + 0.5 - px) * zoom), my = (int) Math.round(cys + (m.z + 0.5 - pz) * zoom);
                 if (mx < x0 || my < y0 || mx > x1 || my > y1) continue;
-                g.blit(MarkerOverlay.icon(m.icon), mx - 4, my - 8, 8, 8, 0, 0, 16, 16, 16, 16);
+                int ms = MarkerOverlay.size(8);
+                g.blit(MarkerOverlay.icon(m.icon), mx - ms / 2, my - ms, ms, ms, 0, 0, 16, 16, 16, 16);
             }
         }
         if (PergamentConfig.ENTITIES_ON_MINIMAP.get()) {
@@ -76,6 +78,17 @@ public final class MinimapHud implements IGuiOverlay {
         Paper.frame(g, x0, y0, x1, y1);
         g.drawCenteredString(mc.font, T.t("compass.n"), (int) cxs, y0 + 3, Paper.RED);
         String co = p.getBlockX() + ", " + p.getBlockY() + ", " + p.getBlockZ();
-        g.drawString(mc.font, co, (int) cxs - mc.font.width(co) / 2, y1 + 2, 0xFFFFFFFF, true);
+        g.drawString(mc.font, co, under(mc, co, cxs, screenW), y1 + 2, 0xFFFFFFFF, true);
+        if (clock) {                                                     // время игры и настоящее, дата (календарь TFC)
+            String tl = ru.stef.pergament.client.GameClock.timeLine(mc), dl = ru.stef.pergament.client.GameClock.dateLine(mc);
+            g.drawString(mc.font, tl, under(mc, tl, cxs, screenW), y1 + 12, 0xFFFFFFFF, true);
+            g.drawString(mc.font, dl, under(mc, dl, cxs, screenW), y1 + 22, 0xFFE8D8A8, true);
+        }
+    }
+
+    /** Строка под миникартой: по центру, но не за край экрана (миникарта в углу). */
+    private static int under(Minecraft mc, String text, double cxs, int screenW) {
+        int w = mc.font.width(text);
+        return Math.max(2, Math.min(screenW - w - 2, (int) cxs - w / 2));
     }
 }

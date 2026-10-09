@@ -40,6 +40,7 @@ public final class ClientSetup {
         MinecraftForge.EVENT_BUS.addListener(ClientSetup::onLogout);
         MinecraftForge.EVENT_BUS.addListener(OreWatch::onChat);
         MinecraftForge.EVENT_BUS.addListener(Deaths::onScreen);
+        MinecraftForge.EVENT_BUS.addListener(ru.stef.pergament.client.gui.WorldMarkers::capture);
         TeamClient.init();
         TeamSyncClient.init();
         TeamSelfTest.init();
@@ -53,6 +54,7 @@ public final class ClientSetup {
     }
 
     private static void onRegisterOverlays(RegisterGuiOverlaysEvent e) {
+        e.registerBelowAll("world_markers", ru.stef.pergament.client.gui.WorldMarkers.INSTANCE);
         e.registerAboveAll("minimap", MinimapHud.INSTANCE);
     }
 

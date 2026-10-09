@@ -62,6 +62,7 @@ public final class Deaths {
         Markers.Marker m = new Markers.Marker();
         m.kind = KIND;
         m.icon = "skull";
+        m.world = true;                                   // путь к месту гибели — виден в мире
         m.name = T.t("death.name", new SimpleDateFormat("dd.MM HH:mm").format(new Date(now)));
         m.desc = cause == null ? "" : cause;
         m.x = mc.player.getBlockX();

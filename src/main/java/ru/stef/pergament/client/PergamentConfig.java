@@ -14,8 +14,11 @@ public final class PergamentConfig {
     public static final ForgeConfigSpec.BooleanValue ENTITIES_ON_MINIMAP;
     public static final ForgeConfigSpec.IntValue MOB_VERTICAL;
     public static final ForgeConfigSpec.IntValue DEATH_KEEP;
+    public static final ForgeConfigSpec.IntValue MARKER_SCALE;
+    public static final ForgeConfigSpec.BooleanValue WAYPOINTS;
     public static final ForgeConfigSpec.BooleanValue MINIMAP;
     public static final ForgeConfigSpec.IntValue MINIMAP_SIZE;
+    public static final ForgeConfigSpec.BooleanValue MINIMAP_CLOCK;
     public static final ForgeConfigSpec.IntValue MINIMAP_CORNER;
     public static final ForgeConfigSpec.DoubleValue MINIMAP_ZOOM;
 
@@ -40,12 +43,19 @@ public final class PergamentConfig {
         MOB_VERTICAL = b.comment("Mobs are shown only within this many blocks of your height", "Мобы видны, только если они не дальше стольких блоков по высоте от игрока")
                 .defineInRange("mobVerticalRange", 20, 2, 384);
         b.pop();
+        b.push("markers");
+        MARKER_SCALE = b.comment("Marker icon size, percent", "Размер значков меток, проценты").defineInRange("iconScale", 100, 50, 300);
+        WAYPOINTS = b.comment("Show markers marked “in world” in the game world (through walls)",
+                "Показывать в игровом мире метки с галочкой «в мире» (сквозь стены)").define("inWorld", true);
+        b.pop();
         b.push("deaths");
         DEATH_KEEP = b.comment("How many recent death markers to keep per dimension; 0 — off", "Сколько последних меток «здесь погиб» хранить в каждом измерении; 0 — не ставить")
                 .defineInRange("keep", 5, 0, 50);
         b.pop();
         b.push("minimap");
         MINIMAP = b.comment("Show the minimap (key Y)", "Показывать миникарту (клавиша Y)").define("enabled", true);
+        MINIMAP_CLOCK = b.comment("Game time, real time and date (TerraFirmaCraft calendar) under the minimap",
+                "Время в игре, настоящее время и дата (календарь TerraFirmaCraft) под миникартой").define("clock", true);
         MINIMAP_SIZE = b.comment("Minimap side, GUI pixels", "Сторона миникарты, пикселей GUI").defineInRange("size", 110, 48, 256);
         MINIMAP_CORNER = b.comment("Corner: 0 top left, 1 top right, 2 bottom left, 3 bottom right", "Угол: 0 левый верхний, 1 правый верхний, 2 левый нижний, 3 правый нижний")
                 .defineInRange("corner", 1, 0, 3);

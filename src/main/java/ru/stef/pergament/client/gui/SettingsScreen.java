@@ -41,11 +41,17 @@ public class SettingsScreen extends Screen {
                 () -> step(PergamentConfig.MOB_VERTICAL, -5, 5, 384), () -> step(PergamentConfig.MOB_VERTICAL, 5, 5, 384)));
         rows.add(new Row(T.t("set.on_minimap"), () -> PergamentConfig.ENTITIES_ON_MINIMAP.get() ? T.t("val.yes") : T.t("val.no"),
                 () -> toggle(PergamentConfig.ENTITIES_ON_MINIMAP), () -> toggle(PergamentConfig.ENTITIES_ON_MINIMAP)));
+        rows.add(new Row(T.t("set.marker_scale"), () -> PergamentConfig.MARKER_SCALE.get() + "%",
+                () -> step(PergamentConfig.MARKER_SCALE, -25, 50, 300), () -> step(PergamentConfig.MARKER_SCALE, 25, 50, 300)));
+        rows.add(new Row(T.t("set.waypoints"), () -> PergamentConfig.WAYPOINTS.get() ? T.t("val.shown_pl") : T.t("val.hidden_pl"),
+                () -> toggle(PergamentConfig.WAYPOINTS), () -> toggle(PergamentConfig.WAYPOINTS)));
         rows.add(new Row(T.t("set.deaths"), () -> PergamentConfig.DEATH_KEEP.get() == 0 ? T.t("val.never")
                 : String.valueOf(PergamentConfig.DEATH_KEEP.get()),
                 () -> step(PergamentConfig.DEATH_KEEP, -1, 0, 50), () -> step(PergamentConfig.DEATH_KEEP, 1, 0, 50)));
         rows.add(new Row(T.t("set.minimap"), () -> PergamentConfig.MINIMAP.get() ? T.t("val.shown") : T.t("val.hidden"),
                 () -> toggle(PergamentConfig.MINIMAP), () -> toggle(PergamentConfig.MINIMAP)));
+        rows.add(new Row(T.t("set.clock"), () -> PergamentConfig.MINIMAP_CLOCK.get() ? T.t("val.yes") : T.t("val.no"),
+                () -> toggle(PergamentConfig.MINIMAP_CLOCK), () -> toggle(PergamentConfig.MINIMAP_CLOCK)));
         rows.add(new Row(T.t("set.minimap_size"), () -> String.valueOf(PergamentConfig.MINIMAP_SIZE.get()),
                 () -> step(PergamentConfig.MINIMAP_SIZE, -8, 48, 256), () -> step(PergamentConfig.MINIMAP_SIZE, 8, 48, 256)));
         rows.add(new Row(T.t("set.minimap_zoom"), () -> T.t("val.px_per_block", fmt(PergamentConfig.MINIMAP_ZOOM.get())),

@@ -67,11 +67,13 @@ public final class Markers {
         public long created = System.currentTimeMillis();
         /** Чья метка: "" — игрока, "death" — автометка гибели (её подчищает лимит). */
         public String kind = "";
+        /** Показывать в игровом мире (путевая точка). */
+        public boolean world;
 
         public Marker copy() {
             Marker m = new Marker();
             m.id = id; m.name = name; m.desc = desc; m.icon = icon;
-            m.x = x; m.y = y; m.z = z; m.created = created; m.kind = kind;
+            m.x = x; m.y = y; m.z = z; m.created = created; m.kind = kind; m.world = world;
             return m;
         }
     }
