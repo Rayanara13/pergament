@@ -57,22 +57,31 @@ public final class WorldMarkers implements IGuiOverlay {
             proj.transform(v);
             if (v.w <= 0.01f) continue;                               // позади камеры
             double nx = v.x / v.w, ny = v.y / v.w;
-            if (Math.abs(nx) > 1.2 || Math.abs(ny) > 1.2) continue;
+            if (Math.abs(nx) > 0.98 || Math.abs(ny) > 0.98) continue;      // у края экрана — не рисовать обрывки
             spots.add(new Spot(m, (nx + 1) / 2 * w, (1 - ny) / 2 * h, dist));
         }
         spots.sort((a, b) -> Double.compare(b.dist, a.dist));         // ближние — поверх
-        int s = Math.max(8, Math.round(16 * PergamentConfig.MARKER_SCALE.get() / 100f));
+        // минимализм: небольшой полупрозрачный значок и мелкое расстояние; название — только под прицелом
+        int s = Math.max(6, Math.round(10 * PergamentConfig.MARKER_SCALE.get() / 100f));
         var font = mc.font;
+        double cx = w / 2.0, cy = h / 2.0;
         for (Spot sp : spots) {
             int x = (int) Math.round(sp.sx), y = (int) Math.round(sp.sy);
+            boolean aimed = Math.hypot(sp.sx - cx, sp.sy - (cy + s / 2.0)) < Math.max(14, s * 1.5);
+            com.mojang.blaze3d.systems.RenderSystem.enableBlend();
+            g.setColor(1f, 1f, 1f, aimed ? 0.95f : 0.6f);
             g.blit(MarkerOverlay.icon(sp.m.icon), x - s / 2, y - s, s, s, 0, 0, 16, 16, 16, 16);
-            String name = sp.m.name.isEmpty() ? T.t("marker.unnamed") : sp.m.name;
-            String d = T.t("unit.blocks", Math.round(sp.dist));
-            int ty = y + 2;
-            int tw = Math.max(font.width(name), font.width(d)) + 6;
-            g.fill(x - tw / 2, ty - 1, x - tw / 2 + tw, ty + 19, 0x88000000);
-            g.drawCenteredString(font, name, x, ty, 0xFFFFFFFF);
-            g.drawCenteredString(font, d, x, ty + 10, 0xFFE8D8A8);
+            g.setColor(1f, 1f, 1f, 1f);
+            var pose = g.pose();
+            pose.pushPose();
+            pose.translate(x, y + 1, 0);
+            pose.scale(0.6f, 0.6f, 1f);                               // мелкий шрифт
+            g.drawCenteredString(font, T.t("unit.blocks", Math.round(sp.dist)), 0, 0, aimed ? 0xF0FFFFFF : 0x99FFFFFF);
+            if (aimed) {
+                String name = sp.m.name.isEmpty() ? T.t("marker.unnamed") : sp.m.name;
+                g.drawCenteredString(font, name, 0, (int) (-(s + 2) / 0.6f) - 9, 0xF0FFFFFF);
+            }
+            pose.popPose();
         }
     }
 }

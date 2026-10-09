@@ -11,7 +11,7 @@ Minecraft 1.20.1 · Forge 47+ · MIT · English / Русский — **[Download
 | | |
 |---|---|
 | ![Paths](docs/screenshots/02_route.jpg) | ![Markers](docs/screenshots/04_marker.jpg) |
-| ![60 icons](docs/screenshots/05_icons.jpg) | ![Minimap](docs/screenshots/09_ingame_minimap.jpg) |
+| ![67 icons](docs/screenshots/05_icons.jpg) | ![Minimap](docs/screenshots/09_ingame_minimap.jpg) |
 
 *Русское описание — ниже.*
 
@@ -30,7 +30,7 @@ For team features, also put the same jar into the server's `mods` (FTB Teams req
   so resource packs and modded blocks look right.
 - **Only what you explored.** The map reveals around you as you move: 8 chunks ahead along your view,
   4 behind (configurable). No x-ray, no ores you have not found.
-- **Markers** with 60 icons in 6 groups, names and descriptions; a searchable list.
+- **Markers** with 67 icons in 6 groups, names and descriptions; a searchable list.
 - **Paths**: an A* route from A through any waypoints to B, over explored terrain only
   (water and steep climbs cost more).
 - **Ruler**, **pen** with colors and an eraser, **death markers** with the cause of death.
@@ -75,7 +75,7 @@ Inspired by *MapMinecraft* by erkinpaw; all code and art are original.
   вода темнее на глубине. Цвета — из настоящих текстур блоков и тинта биома: ресурспаки и блоки модов выглядят как в игре.
 - **Только разведанное.** Карта открывается вокруг игрока: 8 чанков по взгляду, 4 за спиной (настраивается).
   Никакого рентгена и руд, которых ты не находил.
-- **Метки**: 60 значков в 6 группах, название, описание, список с поиском.
+- **Метки**: 67 значков в 6 группах, название, описание, список с поиском.
 - **Тропы**: маршрут A* от A через любые точки до B только по разведанному (вода и крутые подъёмы дороже).
 - **Линейка**, **перо** с цветами и ластиком, **метки гибели** с причиной смерти.
 - **Игроки и мобы**: настоящие головы игроков; по желанию — головы мобов из их собственных моделей

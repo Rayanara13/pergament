@@ -192,6 +192,12 @@
   "gkey": "nature"
  },
  {
+  "id": "berries",
+  "ru": "Ягоды",
+  "group": "Природа",
+  "gkey": "nature"
+ },
+ {
   "id": "desert",
   "ru": "Пустыня",
   "group": "Природа",
@@ -234,6 +240,30 @@
   "gkey": "resources"
  },
  {
+  "id": "ore_redstone",
+  "ru": "Редстоун",
+  "group": "Ресурсы",
+  "gkey": "resources"
+ },
+ {
+  "id": "ore_blue",
+  "ru": "Синяя руда",
+  "group": "Ресурсы",
+  "gkey": "resources"
+ },
+ {
+  "id": "ore_pink",
+  "ru": "Розовая руда",
+  "group": "Ресурсы",
+  "gkey": "resources"
+ },
+ {
+  "id": "ore_darkgreen",
+  "ru": "Тёмно-зелёная руда",
+  "group": "Ресурсы",
+  "gkey": "resources"
+ },
+ {
   "id": "diamond",
   "ru": "Алмаз",
   "group": "Ресурсы",
@@ -270,6 +300,12 @@
   "gkey": "resources"
  },
  {
+  "id": "clay",
+  "ru": "Глина",
+  "group": "Ресурсы",
+  "gkey": "resources"
+ },
+ {
   "id": "skull",
   "ru": "Смерть",
   "group": "Опасности",
@@ -284,6 +320,12 @@
  {
   "id": "monster",
   "ru": "Монстры",
+  "group": "Опасности",
+  "gkey": "danger"
+ },
+ {
+  "id": "raiders",
+  "ru": "Разбойники",
   "group": "Опасности",
   "gkey": "danger"
  },

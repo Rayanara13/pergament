@@ -210,5 +210,12 @@
   "pergament.set.marker_scale": "Размер значков меток",
   "pergament.set.waypoints": "Метки в мире",
   "pergament.marker.world_on": "В мире: показывать",
-  "pergament.marker.world_off": "В мире: не показывать"
+  "pergament.marker.world_off": "В мире: не показывать",
+  "pergament.icon.berries": "Ягоды",
+  "pergament.icon.ore_redstone": "Редстоун",
+  "pergament.icon.ore_blue": "Синяя руда",
+  "pergament.icon.ore_pink": "Розовая руда",
+  "pergament.icon.ore_darkgreen": "Тёмно-зелёная руда",
+  "pergament.icon.clay": "Глина",
+  "pergament.icon.raiders": "Разбойники"
 }

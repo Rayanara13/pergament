@@ -210,5 +210,12 @@
   "pergament.set.marker_scale": "Marker icon size",
   "pergament.set.waypoints": "Markers in the world",
   "pergament.marker.world_on": "In world: shown",
-  "pergament.marker.world_off": "In world: hidden"
+  "pergament.marker.world_off": "In world: hidden",
+  "pergament.icon.berries": "Berries",
+  "pergament.icon.ore_redstone": "Redstone",
+  "pergament.icon.ore_blue": "Blue ore",
+  "pergament.icon.ore_pink": "Pink ore",
+  "pergament.icon.ore_darkgreen": "Dark green ore",
+  "pergament.icon.clay": "Clay",
+  "pergament.icon.raiders": "Raiders"
 }

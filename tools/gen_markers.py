@@ -74,11 +74,28 @@ GKEY = {"Основные": "basic", "Постройки": "buildings", "При�
         "Опасности": "danger", "Транспорт и вещи": "transport"}
 
 
+HAND = os.path.join(os.path.dirname(__file__), "hand_icons")   # нарисованные руками — поверх сгенерированных
+
+
 def icon(gid, ru, group, fn, raw=False):
-    im = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
-    fn(ImageDraw.Draw(im), im)
-    if not raw:
-        im = finish(im)
+    hand = os.path.join(HAND, gid + ".png")
+    if os.path.isfile(hand):                                        # рисунок от руки — как есть, без обводки
+        im = Image.open(hand).convert("RGBA")
+        if im.size != (16, 16):
+            raise SystemExit("hand_icons/%s.png: %sx%s, нужен 16x16" % (gid, im.size[0], im.size[1]))
+        # пиксель-арт: пиксель есть или нет — следы ластика (почти прозрачное) убрать, иначе игра их проявит
+        px = im.load()
+        for y in range(16):
+            for x in range(16):
+                r, g, b, a = px[x, y]
+                px[x, y] = (r, g, b, 255) if a >= 128 else (0, 0, 0, 0)
+    else:
+        if fn is None:
+            raise SystemExit("нет рисунка hand_icons/%s.png" % gid)
+        im = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+        fn(ImageDraw.Draw(im), im)
+        if not raw:
+            im = finish(im)
     im.save(os.path.join(OUT, "icon_mk_" + gid + ".png"))
     ICONS.append({"id": gid, "ru": ru, "group": group, "gkey": GKEY[group]})
 
@@ -462,6 +479,7 @@ def main():
     icon("volcano", "Вулкан", G3, volcano)
     icon("flower", "Цветы", G3, flower)
     icon("mushroom", "Грибы", G3, mushroom)
+    icon("berries", "Ягоды", G3, None)
     icon("desert", "Пустыня", G3, desert)
     icon("snow", "Снега", G3, snowflake)
 
@@ -470,16 +488,22 @@ def main():
     icon("ore_copper", "Медная руда", G4, ore((220, 120, 70, 255)))
     icon("ore_tin", "Оловянная руда", G4, ore((210, 210, 214, 255)))
     icon("ore_gold", "Золотая руда", G4, ore(GOLD))
+    icon("ore_redstone", "Редстоун", G4, None)
+    icon("ore_blue", "Синяя руда", G4, None)
+    icon("ore_pink", "Розовая руда", G4, None)
+    icon("ore_darkgreen", "Тёмно-зелёная руда", G4, None)
     icon("diamond", "Алмаз", G4, gem(DIAMOND))
     icon("emerald", "Изумруд", G4, gem(EMERALD))
     icon("ingot_gold", "Слиток золота", G4, ingot(GOLD))
     icon("ingot_iron", "Слиток железа", G4, ingot(IRON))
     icon("coal", "Уголь", G4, coal)
     icon("crystal", "Кристаллы", G4, crystal)
+    icon("clay", "Глина", G4, None)
 
     icon("skull", "Смерть", G5, skull)
     icon("sword", "Бой", G5, sword)
     icon("monster", "Монстры", G5, monster)
+    icon("raiders", "Разбойники", G5, None)
     icon("spider", "Пауки", G5, spider)
     icon("fire", "Огонь", G5, fire)
     icon("lava", "Лава", G5, lava)
