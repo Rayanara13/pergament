@@ -192,7 +192,6 @@
   "pergament.icon_group.resources": "Resources",
   "pergament.icon_group.danger": "Dangers",
   "pergament.icon_group.transport": "Transport and items",
-  "pergament.clock.time": "game %s · real %s",
   "pergament.clock.date": "%2$s %1$s",
   "pergament.clock.day": "Day %s",
   "pergament.set.clock": "Time and date under minimap",

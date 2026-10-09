@@ -43,7 +43,8 @@ public final class EntityMarks {
             for (Player p : mc.level.players()) {
                 if (p == mc.player || p.isInvisibleTo(mc.player) || !(p instanceof AbstractClientPlayer acp)) continue;
                 double x = Mth.lerp(partial, p.xo, p.getX()), z = Mth.lerp(partial, p.zo, p.getZ());
-                int cx = (int) Math.round(sx.applyAsDouble(x)), cy = (int) Math.round(sy.applyAsDouble(z));
+                double fx = sx.applyAsDouble(x), fy = sy.applyAsDouble(z);
+                int cx = sub(g, fx, fy), cy = (int) Math.floor(fy);
                 head(g, acp.getSkinTextureLocation(), cx, cy, size, p.getYRot(), Paper.INK);
                 if (names) {
                     String n = p.getGameProfile().getName();
@@ -51,12 +52,15 @@ public final class EntityMarks {
                     g.fill(cx - w / 2, cy + size / 2 + 2, cx - w / 2 + w, cy + size / 2 + 12, 0xDDF1E4C0);
                     g.drawString(font, n, cx - w / 2 + 2, cy + size / 2 + 3, Paper.INK, false);
                 }
+                g.pose().popPose();
             }
         }
         if (mc.player != null) {
             double x = Mth.lerp(partial, mc.player.xo, mc.player.getX()), z = Mth.lerp(partial, mc.player.zo, mc.player.getZ());
-            head(g, mc.player.getSkinTextureLocation(), (int) Math.round(sx.applyAsDouble(x)),
-                    (int) Math.round(sy.applyAsDouble(z)), size, mc.player.getYRot(), Paper.RED);
+            double fx = sx.applyAsDouble(x), fy = sy.applyAsDouble(z);
+            int cx = sub(g, fx, fy), cy = (int) Math.floor(fy);
+            head(g, mc.player.getSkinTextureLocation(), cx, cy, size, mc.player.getYRot(), Paper.RED);
+            g.pose().popPose();
         }
     }
 
@@ -82,7 +86,8 @@ public final class EntityMarks {
             var info = mc.getConnection() == null ? null : mc.getConnection().getPlayerInfo(m.id());
             ResourceLocation skin = info != null ? info.getSkinLocation()
                     : net.minecraft.client.resources.DefaultPlayerSkin.getDefaultSkin(m.id());
-            int cx = (int) Math.round(sx.applyAsDouble(m.x() + 0.5)), cy = (int) Math.round(sy.applyAsDouble(m.z() + 0.5));
+            double fx = sx.applyAsDouble(m.x() + 0.5), fy = sy.applyAsDouble(m.z() + 0.5);
+            int cx = sub(g, fx, fy), cy = (int) Math.floor(fy);
             head(g, skin, cx, cy, size, m.yaw(), MATE_FRAME);
             if (names) {
                 LAST_MATES.add(m.id());
@@ -90,6 +95,7 @@ public final class EntityMarks {
                 g.fill(cx - w / 2, cy + size / 2 + 2, cx - w / 2 + w, cy + size / 2 + 12, 0xDDF1E4C0);
                 g.drawString(font, m.name(), cx - w / 2 + 2, cy + size / 2 + 3, MATE_FRAME, false);
             }
+            g.pose().popPose();
         }
     }
 
@@ -104,8 +110,9 @@ public final class EntityMarks {
                     || !le.isAlive() || e.isInvisibleTo(mc.player)) continue;
             if (Math.abs(e.getY() - mc.player.getY()) > PergamentConfig.MOB_VERTICAL.get()) continue;  // не тащить дно пещер на поверхность
             double x = Mth.lerp(partial, e.xo, e.getX()), z = Mth.lerp(partial, e.zo, e.getZ());
-            int cx = (int) Math.round(sx.applyAsDouble(x)), cy = (int) Math.round(sy.applyAsDouble(z));
-            if (cx < clipX0 || cy < clipY0 || cx > clipX1 || cy > clipY1) continue;
+            double fx = sx.applyAsDouble(x), fy = sy.applyAsDouble(z);
+            if (fx < clipX0 || fy < clipY0 || fx > clipX1 || fy > clipY1) continue;
+            int cx = sub(g, fx, fy), cy = (int) Math.floor(fy);
             MobCategory cat = e.getType().getCategory();
             int frame = switch (cat) {
                 case MONSTER -> 0xFFB02A1A;
@@ -121,10 +128,22 @@ public final class EntityMarks {
             } else {                                            // головы нет — кружок по типу
                 g.fill(cx - h + 1, cy - h + 1, cx + h - 1, cy + h - 1, (frame & 0x00FFFFFF) | 0xCC000000);
             }
+            g.pose().popPose();
         }
     }
 
     /** Лицо игрока в рамке и чёрточка взгляда снаружи. */
+    /**
+     * Точка в пикселях GUI с долями: доли — сдвигом позы (как фон карты, который едет плавно), целое — для рисования.
+     * Без этого значки прыгают целыми пикселями GUI и «дрожат» относительно фона. Кладёт позу — снять popPose.
+     */
+    private static int sub(GuiGraphics g, double fx, double fy) {
+        int ix = (int) Math.floor(fx), iy = (int) Math.floor(fy);
+        g.pose().pushPose();
+        g.pose().translate(fx - ix, fy - iy, 0);
+        return ix;
+    }
+
     private static void head(GuiGraphics g, ResourceLocation skin, int cx, int cy, int size, float yRot, int frame) {
         int h = size / 2;
         double yaw = Math.toRadians(yRot);

@@ -192,7 +192,6 @@
   "pergament.icon_group.resources": "Ресурсы",
   "pergament.icon_group.danger": "Опасности",
   "pergament.icon_group.transport": "Транспорт и вещи",
-  "pergament.clock.time": "в игре %s · сейчас %s",
   "pergament.clock.date": "%s %s",
   "pergament.clock.day": "день %s",
   "pergament.set.clock": "Время и дата под миникартой",
