@@ -4,6 +4,11 @@ import ru.stef.pergament.client.T;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.EmptyBlockGetter;
+import ru.stef.pergament.client.scan.ChunkScanner;
+import ru.stef.pergament.client.geo.BiomeCat;
+import ru.stef.pergament.client.geo.Geo;
+import ru.stef.pergament.client.geo.Toponyms;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -61,7 +66,7 @@ public final class XaeroImport {
     private final Thread reader;
     private volatile boolean cancelled, readerDone;
     private Parsed pending;
-    private RegionData pendingColored;
+    private Colored pendingColored;
 
     public final int total;
     public volatile int read, merged, chunksAdded, chunksKept, errors;
@@ -73,6 +78,10 @@ public final class XaeroImport {
     public volatile boolean done;
 
     private record Parsed(Source src, XaeroRegion region) {}
+    /** Регион, раскрашенный нашим способом, и местность его чанков (для подписей). */
+    private record Colored(RegionData data, it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap geo) {}
+    /** Местность чанков не открытых сейчас измерений — допишется в их geo.bin в конце. */
+    private final Map<String, it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap> geoOther = new HashMap<>();
 
     private XaeroImport(String profile, List<Source> sources) {
         this.profile = profile;
@@ -158,7 +167,7 @@ public final class XaeroImport {
         }
         if (inFlight.get() >= MAX_IN_FLIGHT) return;
         if (pendingColored == null) pendingColored = color(pending.region);
-        RegionData colored = pendingColored;
+        RegionData colored = pendingColored.data();
         String dim = pending.src.dimension;
         DimMap live = LocalMap.get().live();
         if (live != null && dim.equals(live.dimension())) {
@@ -178,6 +187,14 @@ public final class XaeroImport {
             Path dir = WorldProfile.dir(profile, dim);
             inFlight.incrementAndGet();
             DimMap.onIo(() -> mergeFile(dir, dim, colored));
+        }
+        // местность — тоже только туда, где её ещё нет: свой скан главнее (у Xaero нет русел, только биомы)
+        if (live != null && dim.equals(live.dimension())) {
+            var tp = live.toponymy();
+            for (var e : pendingColored.geo().long2LongEntrySet()) tp.putIfAbsent(e.getLongKey(), e.getLongValue());
+        } else {
+            var m = geoOther.computeIfAbsent(dim, d -> new it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap());
+            for (var e : pendingColored.geo().long2LongEntrySet()) m.putIfAbsent(e.getLongKey(), e.getLongValue());
         }
         pending = null;
         pendingColored = null;
@@ -237,6 +254,12 @@ public final class XaeroImport {
         done = true;
         reader.interrupt();
         status = how;
+        for (var e : geoOther.entrySet()) {
+            Path dir = WorldProfile.dir(profile, e.getKey());
+            var cells = e.getValue();
+            DimMap.onIo(() -> ru.stef.pergament.client.map.Toponymy.mergeFile(dir, cells));
+        }
+        geoOther.clear();
         if (chunksAdded > 0) ru.stef.pergament.client.TeamSyncClient.archiveAgain(profile);   // импорт — и команде
         Minecraft mc = Minecraft.getInstance();
         String msg = T.t("xaero.msg", how, chunksAdded, chunksKept) + (errors > 0 ? T.t("xaero.errors", errors) : "");
@@ -246,7 +269,7 @@ public final class XaeroImport {
 
     // ---------- раскраска нашим способом ----------
 
-    private static RegionData color(XaeroRegion xr) {
+    private static Colored color(XaeroRegion xr) {
         Minecraft mc = Minecraft.getInstance();
         BlockState[] states = new BlockState[xr.palette.size()];
         for (int k = 0; k < states.length; k++) states[k] = state(xr.palette.get(k));
@@ -257,6 +280,10 @@ public final class XaeroImport {
             biomes[k] = reg == null || id == null ? null : reg.get(id);
         }
         Biome fallback = reg == null ? null : reg.get(new ResourceLocation("minecraft", "plains"));
+        @SuppressWarnings("unchecked")
+        net.minecraft.core.Holder<Biome>[] holders = new net.minecraft.core.Holder[biomes.length];
+        for (int k = 0; k < biomes.length; k++) holders[k] = biomes[k] == null || reg == null ? null : reg.wrapAsHolder(biomes[k]);
+        var geo = new it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap();
         RegionData out = new RegionData(xr.rx, xr.rz);
         Tint tint = new Tint();
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
@@ -264,7 +291,10 @@ public final class XaeroImport {
         for (int cz = 0; cz < 32; cz++) {
             for (int cx = 0; cx < 32; cx++) {
                 cache.clear();                                     // тинт — раз на «блок + биом» в чанке, как в скане
+                int gCols = 0, gWater = 0, gPeak = Integer.MIN_VALUE, gPx = 8, gPz = 8;
+                int[] votes = new int[8];
                 for (int lz = cz * 16; lz < cz * 16 + 16; lz++) {
+                    int land = 0;                                  // цвет земли левее в строке — под камешком
                     for (int lx = cx * 16; lx < cx * 16 + 16; lx++) {
                         int i = XaeroRegion.index(lx, lz), st = xr.state[i];
                         if (st == XaeroRegion.NONE) continue;
@@ -272,12 +302,22 @@ public final class XaeroImport {
                         if (s == null) continue;                   // блока больше нет в сборке — оставляем неразведанным
                         int bi = xr.biome[i];
                         tint.biome = bi >= 0 && biomes[bi] != null ? biomes[bi] : fallback;
+                        gCols++;
+                        if ((lx & 3) == 2 && (lz & 3) == 2 && bi >= 0 && holders[bi] != null) votes[BiomeCat.of(holders[bi])]++;
                         int h = xr.height[i], t = xr.top[i];
                         int wx = (xr.rx << 9) + lx, wz = (xr.rz << 9) + lz;
                         pos.set(wx, h, wz);
                         int ov = xr.over[i];
                         BlockState os = ov == XaeroRegion.WATER ? Blocks.WATER.defaultBlockState() : ov >= 0 ? states[ov] : null;
+                        if (os != null && ChunkScanner.litter(os, EmptyBlockGetter.INSTANCE, BlockPos.ZERO)) os = null;
                         FluidState fs = os != null ? os.getFluidState() : s.getFluidState();
+                        if (!fs.isEmpty()) {
+                            if (!fs.is(FluidTags.LAVA)) gWater++;
+                        } else if (h > gPeak) {
+                            gPeak = h;
+                            gPx = lx & 15;
+                            gPz = lz & 15;
+                        }
                         if (!fs.isEmpty()) {
                             int top = os != null ? t : h;
                             pos.set(wx, top, wz);
@@ -293,14 +333,24 @@ public final class XaeroImport {
                             out.set(lx, lz, color(os, tint, pos, cache, ov, bi), t, h, 0, RegionData.CLS_LAND);
                         } else if (s.isAir()) {
                             out.set(lx, lz, 0xFF000000, h, h, 0, RegionData.CLS_VOID);
+                        } else if (land != 0 && ChunkScanner.litter(s, EmptyBlockGetter.INSTANCE, BlockPos.ZERO)) {
+                            out.set(lx, lz, land, h, h, 0, RegionData.CLS_LAND);   // камешек — земли под ним Xaero не хранит
                         } else {
-                            out.set(lx, lz, color(s, tint, pos, cache, st, bi), h, h, 0, RegionData.CLS_LAND);
+                            land = color(s, tint, pos, cache, st, bi);
+                            out.set(lx, lz, land, h, h, 0, RegionData.CLS_LAND);
                         }
                     }
                 }
+                if (gCols >= 64) {                                 // чанк разведан хотя бы на четверть — местность
+                    byte b = 0;
+                    for (byte k = 1; k < votes.length; k++) if (votes[k] > votes[b]) b = k;
+                    float w = gWater / (float) gCols;
+                    geo.put(Toponyms.key((xr.rx << 5) + cx, (xr.rz << 5) + cz),
+                            Geo.pack(Geo.classify(b, w), w, gPeak == Integer.MIN_VALUE ? 63 : gPeak, gPx, gPz));
+                }
             }
         }
-        return out;
+        return new Colored(out, geo);
     }
 
     private static int color(BlockState s, Tint tint, BlockPos pos, Map<Long, Integer> cache, int st, int bi) {

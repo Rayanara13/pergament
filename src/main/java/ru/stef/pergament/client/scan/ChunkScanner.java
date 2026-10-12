@@ -41,6 +41,24 @@ public final class ChunkScanner {
         return g;
     }
 
+    /**
+     * Всё, сквозь что проходишь, — не поверхность: трава (бледный switchgrass TFC — «снег» по всему лугу), цветы,
+     * лежачие камни, палки, ракушки, шишки, кусочки руды. Карта показывает землю под ними.
+     * Видны: снег (настоящий, белый), рельсы и посевы — это сведения, а не мусор.
+     */
+    public static boolean litter(BlockState s, net.minecraft.world.level.BlockGetter level, BlockPos pos) {
+        if (s.isAir() || !s.getFluidState().isEmpty()) return false;
+        if (s.is(net.minecraft.tags.BlockTags.SNOW) || s.is(net.minecraft.tags.BlockTags.RAILS)
+                || s.is(net.minecraft.tags.BlockTags.CROPS)) return false;
+        var id = net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(s.getBlock());
+        if (id != null && (id.getPath().contains("snow") || id.getPath().contains("crop"))) return false;
+        try {
+            return s.getCollisionShape(level, pos).isEmpty();
+        } catch (RuntimeException e) {
+            return false;                                          // блок мода капризничает без мира — оставляем
+        }
+    }
+
     /** Плоский блок (высота коллизии ≤ 0.2) прямо на воде — кувшинка, ряска: колонка водная. */
     static boolean floatsOnWater(LevelChunk chunk, ClientLevel level, BlockPos.MutableBlockPos pos, BlockState s,
                                  int wx, int y, int wz) {
@@ -60,7 +78,14 @@ public final class ChunkScanner {
                 k -> TextureColors.block(s, level, pos.immutable()));
     }
 
-    public static void scan(ClientLevel level, LevelChunk chunk, RegionData region, int playerY) {
+    /** Скан без местности (измерение с потолком — разрез, не поверхность). */
+    public static final long NO_GEO = Long.MIN_VALUE;
+    /** Самотест (-Ppergament_bright): счётчик блоков со светлым цветом сверху. */
+    public static final java.util.Map<String, Integer> BRIGHT = System.getProperty("pergament.selftest.bright") != null
+            ? new java.util.HashMap<>() : null;
+
+    /** Скан чанка в регион; возвращает местность чанка для подписей ({@link ru.stef.pergament.client.geo.Geo}). */
+    public static long scan(ClientLevel level, LevelChunk chunk, RegionData region, int playerY) {
         ChunkPos cp = chunk.getPos();
         boolean ceiling = level.dimensionType().hasCeiling();
         int minY = level.getMinBuildHeight();
@@ -68,6 +93,8 @@ public final class ChunkScanner {
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         // тинт травы/листвы Minecraft усредняет по соседним колонкам — дорого; в чанке считаем раз на «блок + биом»
         java.util.Map<Object, Integer> tintCache = new java.util.HashMap<>();
+        int waterCols = 0, cols = 0, peakY = Integer.MIN_VALUE, peakLx = 8, peakLz = 8;
+        int[] biomeVotes = new int[8];
         for (int lz = 0; lz < 16; lz++) {
             for (int lx = 0; lx < 16; lx++) {
                 int wx = cp.getMinBlockX() + lx, wz = cp.getMinBlockZ() + lz;
@@ -87,11 +114,16 @@ public final class ChunkScanner {
                     pos.set(wx, y, wz);
                     s = chunk.getBlockState(pos);
                     if (!s.isAir() && (!s.getFluidState().isEmpty() || !s.getCollisionShape(level, pos).isEmpty()
-                            || s.getRenderShape() != net.minecraft.world.level.block.RenderShape.INVISIBLE)) break;
+                            || s.getRenderShape() != net.minecraft.world.level.block.RenderShape.INVISIBLE)
+                            && !litter(s, level, pos)) break;
                 }
                 if (y < minY || s == null) {
                     region.set(rxl, rzl, 0xFF000000, minY, 0, RegionData.CLS_VOID);
                     continue;
+                }
+                cols++;
+                if ((lx & 3) == 2 && (lz & 3) == 2) {                  // местность: биом — в 16 точках чанка
+                    biomeVotes[ru.stef.pergament.client.geo.BiomeCat.of(level.getBiome(pos))]++;
                 }
                 FluidState fs = s.getFluidState();
                 // кувшинка и прочая плоская мелочь на воде — это вода: цвет листа виден сверху, но идти нельзя
@@ -123,8 +155,20 @@ public final class ChunkScanner {
                 int ground = depth > 0 ? top : groundBelow(chunk, level, pos, wx, y, wz, minY);
                 int c = floatColor != 0 ? floatColor : depth > 0 ? waterColor : color(s, level, pos, tintCache);
                 region.set(rxl, rzl, c, top, ground, depth, RegionData.CLS_LAND);
+                if (BRIGHT != null && depth == 0) {                    // самотест: какие блоки дают светлые крапинки
+                    int r = c & 0xFF, gg = (c >> 8) & 0xFF, bb = (c >> 16) & 0xFF;
+                    if (r + gg + bb > 400) BRIGHT.merge(net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(s.getBlock()) + "", 1, Integer::sum);
+                }
+                if (depth > 0 || floatColor != 0) waterCols++;
+                else if (ground > peakY) { peakY = ground; peakLx = lx; peakLz = lz; }
             }
         }
         region.touch();
+        if (ceiling || cols == 0) return NO_GEO;
+        byte biome = 0;
+        for (byte b = 1; b < biomeVotes.length; b++) if (biomeVotes[b] > biomeVotes[biome]) biome = b;
+        if (peakY == Integer.MIN_VALUE) peakY = level.getSeaLevel();
+        float water = waterCols / (float) cols;
+        return ru.stef.pergament.client.geo.Geo.pack(ru.stef.pergament.client.geo.Geo.classify(biome, water), water, peakY, peakLx, peakLz);
     }
 }

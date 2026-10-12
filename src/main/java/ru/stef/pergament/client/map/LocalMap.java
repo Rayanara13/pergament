@@ -210,7 +210,8 @@ public final class LocalMap {
                 continue;
             }
             long s0 = System.nanoTime();
-            ChunkScanner.scan(level, chunk, r, p.getBlockY());
+            long geo = ChunkScanner.scan(level, chunk, r, p.getBlockY());
+            if (geo != ChunkScanner.NO_GEO) live.toponymy().put(key, geo);
             ru.stef.pergament.client.TeamSyncClient.scanned(live.dim, cx, cz);
             scanNanos += System.nanoTime() - s0;
             lastScan.put(key, System.currentTimeMillis());

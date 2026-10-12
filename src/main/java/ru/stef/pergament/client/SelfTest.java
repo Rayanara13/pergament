@@ -35,7 +35,7 @@ public final class SelfTest {
     public static final boolean ON = "1".equals(System.getProperty("pergament.selftest"));
     private static final int TIMEOUT_TICKS = 20 * 240;
 
-    private enum Step { TITLE, CREATE, PLAYING, MAP, GT_WAIT, GT_MAP, TRAVEL, DIM_MAP, DONE }
+    private enum Step { TITLE, CREATE, PLAYING, MAP, GT_WAIT, GT_MAP, ORES, TRAVEL, DIM_MAP, DONE }
 
     private static Step step = Step.TITLE;
     private static int ticks, inWorld, onMap, stable, lastScanned = -1;
@@ -80,9 +80,52 @@ public final class SelfTest {
         }
     }
 
+    private static int shareT;
+
+    /**
+     * -Ppergament_share: метка — в чат, ждём своё сообщение с кнопкой «на карту», «кликаем» её так же, как игрок
+     * (обработчик экрана чата → клиентская команда), проверяем, что метка легла в карту.
+     */
+    private static void shareTest(Minecraft mc) {
+        if (System.getProperty("pergament.selftest.share") == null || mc.player == null || LocalMap.get().live() == null) return;
+        int t = ++shareT;
+        if (t == 40) {
+            var m = new ru.stef.pergament.client.map.Markers.Marker();
+            m.name = "Тест обмена";
+            m.icon = "ore_copper";
+            m.x = mc.player.getBlockX() + 37;
+            m.y = 70;
+            m.z = mc.player.getBlockZ() - 11;
+            MarkerShare.send(m, LocalMap.get().dimension());
+        } else if (t == 80) {
+            var st = MarkerShare.lastButton;
+            Pergament.LOG.info("SHARETEST кнопка в чате: {}", st == null ? "нет" : st.getClickEvent());
+            if (st != null) mc.setScreen(new net.minecraft.client.gui.screens.ChatScreen(""));
+        } else if (t == 84 && mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen chat) {
+            // кнопку ищем на экране чата и «нажимаем» тем же событием Forge, что шлёт мышь
+            int h = chat.height;
+            outer:
+            for (int y = h - 14; y > h - 120; y--) {
+                for (int x = 0; x < chat.width; x++) {
+                    if (MarkerShare.tokenAt(x, y) != null) {
+                        boolean handled = net.minecraftforge.client.ForgeHooksClient.onScreenMouseClickedPre(chat, x, y, 0);
+                        Pergament.LOG.info("SHARETEST клик в ({}, {}) перехвачен={}", x, y, handled);
+                        break outer;
+                    }
+                }
+            }
+        } else if (t == 90) {
+            mc.setScreen(null);
+            boolean ok = LocalMap.get().live().markers().all().stream()
+                    .anyMatch(m -> m.name.equals("Тест обмена") && m.x == mc.player.getBlockX() + 37);
+            Pergament.LOG.info("SHARETEST result={}", ok ? "ok" : "FAIL");
+        }
+    }
+
     private static void onTick(TickEvent.ClientTickEvent e) {
         if (e.phase != TickEvent.Phase.END || step == Step.DONE) return;
         Minecraft mc = Minecraft.getInstance();
+        shareTest(mc);
         if (++ticks > (Showcase.enabled() ? TIMEOUT_TICKS * 4 : TIMEOUT_TICKS)) {
             finish(mc, "timeout");
             return;
@@ -312,6 +355,15 @@ public final class SelfTest {
             }
             Pergament.LOG.info("SELFTEST GT source={} veinsNearPlayer={}", src != null, n);
             Screenshot.grab(mc.gameDirectory, "pergament_gt.png", mc.getMainRenderTarget(), msg -> { });
+            MapScreen.tool = MapScreen.Tool.NONE;                   // дальше — поиск руд: список, вкладка «Руды»
+            MapScreen.oresForTest(true);
+            mc.setScreen(new MapScreen());
+            step = Step.ORES;
+            onMap = 0;
+        } else if (step == Step.ORES && ++onMap == 30) {
+            Screenshot.grab(mc.gameDirectory, "pergament_ores.png", mc.getMainRenderTarget(), msg -> { });
+        } else if (step == Step.ORES && onMap >= 40) {
+            MapScreen.oresForTest(false);
             afterOverworld(mc);
         } else if (step == Step.TRAVEL && mc.player != null && mc.level != null) {
             travelTicks++;
@@ -432,6 +484,11 @@ public final class SelfTest {
 
     private static void finish(Minecraft mc, String why) {
         step = Step.DONE;
+        if (ru.stef.pergament.client.scan.ChunkScanner.BRIGHT != null) {
+            ru.stef.pergament.client.scan.ChunkScanner.BRIGHT.entrySet().stream()
+                    .sorted((x, y) -> y.getValue() - x.getValue()).limit(30)
+                    .forEach(en -> Pergament.LOG.info("BRIGHT {} {}", en.getValue(), en.getKey()));
+        }
         LocalMap map = LocalMap.get();
         String profile = map.profile(), dim = map.dimension();
         int scanned = map.scannedTotal(), regions = map.loadedRegions();

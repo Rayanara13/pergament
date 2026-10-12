@@ -46,6 +46,8 @@ final class MobHeads {
     /** Голову в модели не нашли — портрет настоящим рендером игры (как в инвентаре). */
     private static final Head PORTRAIT = new Head(List.of(), List.of(), false);
     private static Method headParts, bodyParts, listParts;
+    private static final String DEBUG = System.getProperty("pergament.selftest.headdebug");
+    private static final java.util.Set<EntityType<?>> DEBUGGED = new java.util.HashSet<>();
 
     private MobHeads() {}
 
@@ -65,35 +67,51 @@ final class MobHeads {
         @SuppressWarnings({"unchecked", "rawtypes"})
         ResourceLocation tex = ((LivingEntityRenderer) lr).getTextureLocation(e);
 
-        // позы: главную деталь — в начало координат без поворота, остальные — на тех же местах относительно неё
+        // Модель одна на весь тип: в ней поза того моба, кого игра рисовала последним (жуёт, пасётся, уши
+        // хлопают; у анимированных моделей TFC — ещё и масштаб деталей). Всё дерево головы — в исходную позу
+        // из описания модели, масштаб 1; после рисования — вернуть как было.
+        List<ModelPart> tree = new ArrayList<>();
+        for (ModelPart p : parts) p.getAllParts().forEach(tree::add);
+        List<PartPose> saved = new ArrayList<>(tree.size());
+        float[] scales = new float[tree.size() * 3];
+        for (int i = 0; i < tree.size(); i++) {
+            ModelPart p = tree.get(i);
+            saved.add(p.storePose());
+            scales[i * 3] = p.xScale; scales[i * 3 + 1] = p.yScale; scales[i * 3 + 2] = p.zScale;
+            p.resetPose();
+            p.xScale = p.yScale = p.zScale = 1f;
+        }
+        // главную деталь — в начало координат без поворота, остальные — на тех же местах относительно неё
         // (целиком — как есть: позу задаёт сама модель)
         ModelPart first = parts.get(0);
         float ox = first.x, oy = first.y, oz = first.z;
-        List<PartPose> saved = new ArrayList<>();
-        for (ModelPart p : parts) {
-            saved.add(p.storePose());
-            if (head.whole) continue;
+        if (!head.whole) for (ModelPart p : parts) {
             p.x -= ox; p.y -= oy; p.z -= oz;
             p.xRot = 0; p.yRot = 0; p.zRot = 0;
         }
         int half = size / 2;
         g.enableScissor(cx - half, cy - half, cx + half, cy + half);   // поля шляпы, рога — обрезаются рамкой
         try {
-            // масштаб — по собственным кубам головы (без шляпы, рогов-детей, перьев): лицо во весь значок
+            // кадр — по морде: самый крупный куб головы (рога, уши, гребни, клювы, бороды — мельче и плоские),
+            // с запасом; что торчит дальше — срежет рамка, как на портрете
             float[] all = bounds(parts, inner, false);               // minX, minY, minZ, maxX, maxY, maxZ — в блоках
-            float[] b = head.whole ? all : bounds(parts, inner, true);
-            // свои кубы — лишь уши (коза) или пусто: кадр по всей голове
-            if (b[0] > b[3] || (b[3] - b[0]) * (b[4] - b[1]) < 0.35f * (all[3] - all[0]) * (all[4] - all[1])) b = all;
+            float[] b = head.whole ? all : face(parts, inner);
+            if (b[0] > b[3]) b = all;
             float w = b[3] - b[0], h = b[4] - b[1], d = b[5] - b[2];
-            // голова-деталь с шеей (верблюд) или крошечная (попугай) — портрет настоящим рендером
-            if (!head.whole && (h > 2.0f * w || Math.max(w, h) < 4 / 16f)) {
+            if (DEBUG != null && DEBUG.contains(net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).toString())
+                    && DEBUGGED.add(e.getType())) {
+                Pergament.LOG.info("HEADDRAW {} face={} all={}", e.getType(), java.util.Arrays.toString(b), java.util.Arrays.toString(all));
+            }
+            // морда — длинная шея (верблюд) или вырожденная — портрет настоящим рендером
+            if (!head.whole && (h > 3f * w || Math.max(w, h) < 1 / 16f)) {
                 CACHE.put(e.getType(), PORTRAIT);
                 return portrait(g, e, cx, cy, size);
             }
             boolean profile = head.whole;                      // рыба — узнаётся сбоку; голова — анфас
             float span = Math.max(profile ? d : w, h);
+            if (!head.whole) span = Math.min(span * 1.25f, Math.max(all[3] - all[0], all[4] - all[1]));
             if (span <= 0) return false;
-            float k = size / span;
+            float k = crisp(size / span);
             PoseStack ps = g.pose();
             ps.pushPose();
             ps.translate(cx, cy, 150);
@@ -120,8 +138,27 @@ final class MobHeads {
             return false;
         } finally {
             g.disableScissor();
-            for (int i = 0; i < parts.size(); i++) parts.get(i).loadPose(saved.get(i));
+            for (int i = 0; i < tree.size(); i++) {
+                ModelPart p = tree.get(i);
+                p.loadPose(saved.get(i));
+                p.xScale = scales[i * 3]; p.yScale = scales[i * 3 + 1]; p.zScale = scales[i * 3 + 2];
+            }
         }
+    }
+
+    /**
+     * Масштаб (пикселей GUI на блок) так, чтобы пиксель текстуры моба (1/16 блока) лёг в целое число пикселей
+     * экрана: иначе соседние «пиксели» морды разной ширины, и при плавном движении по карте они переливаются.
+     * Чуть крупнее (край срежет рамка) или чуть мельче значка; если до целого далеко или тексель меньше
+     * пикселя — как есть.
+     */
+    private static float crisp(float k) {
+        double gs = Minecraft.getInstance().getWindow().getGuiScale();
+        double texel = k * gs / 16;                              // пикселей экрана на пиксель текстуры
+        if (texel < 1) return k;
+        double up = Math.ceil(texel), down = Math.floor(texel);
+        double t = up / texel <= 1.12 ? up : down / texel >= 0.75 ? down : texel;
+        return (float) (t * 16 / gs);
     }
 
     /**
@@ -215,6 +252,26 @@ final class MobHeads {
         }
     }
 
+    /** Самотест: что выбрано головой у моба — детали, видимость, кубы, габариты (в лог). */
+    static String describe(LivingEntity e) {
+        Minecraft mc = Minecraft.getInstance();
+        if (!(mc.getEntityRenderDispatcher().getRenderer(e) instanceof LivingEntityRenderer<?, ?> lr)) return "не LivingEntityRenderer";
+        EntityModel<?> model = lr.getModel();
+        StringBuilder sb = new StringBuilder(model.getClass().getName());
+        Head h = choose(model, e.getType());
+        if (h == PORTRAIT) return sb.append(" → PORTRAIT").toString();
+        sb.append(h.whole ? " whole" : "").append(" inner=").append(h.inner);
+        for (ModelPart p : h.parts) {
+            sb.append("\n   part visible=").append(p.visible).append(" skip=").append(p.skipDraw)
+                    .append(" pose=").append(p.x).append(',').append(p.y).append(',').append(p.z);
+            p.visit(new PoseStack(), (pose, path, idx, cube) -> sb.append("\n     [").append(path).append("] cube")
+                    .append(String.format(" %.1f..%.1f %.1f..%.1f %.1f..%.1f", cube.minX, cube.maxX, cube.minY, cube.maxY, cube.minZ, cube.maxZ)));
+        }
+        float[] all = bounds(h.parts, h.inner, false), own = bounds(h.parts, h.inner, true);
+        sb.append(String.format("\n   all=%s own=%s", java.util.Arrays.toString(all), java.util.Arrays.toString(own)));
+        return sb.toString();
+    }
+
     /** Деталь со своим кубом (шеей) и ребёнком «head» — оставить детей-голову, без шеи/гривы/упряжи. */
     private static Head trim(List<ModelPart> parts) {
         if (parts.size() != 1) return new Head(parts, List.of(), false);
@@ -248,6 +305,19 @@ final class MobHeads {
                 for (Object o : (Iterable<?>) headParts.invoke(am)) l.add((ModelPart) o);
                 if (!l.isEmpty()) return l;
             }
+            // голова — полем модели (свинья TFC прячет её в «тело» вместе с клыками; у кролика уши — отдельно)
+            if (model instanceof net.minecraft.client.model.QuadrupedModel<?>) {
+                ModelPart head = field(net.minecraft.client.model.QuadrupedModel.class, "f_103492_", model);
+                if (head != null) return List.of(head);
+            }
+            if (model instanceof net.minecraft.client.model.RabbitModel<?>) {
+                List<ModelPart> l = new ArrayList<>();
+                for (String f : new String[]{"f_103523_", "f_103527_", "f_170877_", "f_170878_"}) {   // голова, нос, уши
+                    ModelPart p = field(net.minecraft.client.model.RabbitModel.class, f, model);
+                    if (p != null) l.add(p);
+                }
+                if (!l.isEmpty()) return l;
+            }
             if (model instanceof HierarchicalModel<?> hm) {
                 ModelPart head = byName(hm.root());
                 if (head != null) return List.of(head);
@@ -267,18 +337,29 @@ final class MobHeads {
         return List.of();
     }
 
+    /** Деталь-поле модели по SRG-имени (в dev Forge сам переводит в официальное); нет — null. */
+    private static ModelPart field(Class<?> owner, String srg, Object model) {
+        try {
+            Field f = ObfuscationReflectionHelper.findField(owner, srg);
+            return (ModelPart) f.get(model);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     /** Ближайшая к корню деталь с именем «head»: путь узнаём из visit (он даёт пути к кубам), идём getChild. */
     private static ModelPart byName(ModelPart root) {
         String[] best = {null}, loose = {null};
         root.visit(new PoseStack(), (pose, path, idx, cube) -> {
             String[] seg = path.split("/");
             for (int i = 0; i < seg.length; i++) {
-                if (seg[i].equals("head")) {
+                if (seg[i].equalsIgnoreCase("head")) {                // у крысы TFC — «Head»
                     String p = String.join("/", java.util.Arrays.copyOfRange(seg, 0, i + 1));
                     if (best[0] == null || p.length() < best[0].length()) best[0] = p;
                     break;
                 }
-                if (seg[i].endsWith("_head") || seg[i].startsWith("head_")) {
+                String low = seg[i].toLowerCase(java.util.Locale.ROOT);
+                if (low.endsWith("_head") || low.startsWith("head_")) {
                     String p = String.join("/", java.util.Arrays.copyOfRange(seg, 0, i + 1));
                     if (loose[0] == null || p.length() < loose[0].length() || (p.length() == loose[0].length() && p.compareTo(loose[0]) < 0)) {
                         loose[0] = p;
@@ -295,6 +376,30 @@ final class MobHeads {
             p = p.getChild(s);
         }
         return p == root ? null : p;
+    }
+
+    /** Морда: габариты самого объёмного куба рисуемых деталей (плоские кубы — гребни, бороды — не в счёт). */
+    private static float[] face(List<ModelPart> parts, List<String> inner) {
+        float[] best = {Float.MAX_VALUE, 0, 0, -Float.MAX_VALUE, 0, 0};
+        float[] vol = {0};
+        for (ModelPart part : parts) {
+            part.visit(new PoseStack(), (pose, path, idx, cube) -> {
+                if (!inner.isEmpty() && (path.isEmpty() || !inner.contains(path.split("/")[1]))) return;
+                float v = (cube.maxX - cube.minX) * (cube.maxY - cube.minY) * (cube.maxZ - cube.minZ);
+                if (v <= vol[0]) return;
+                vol[0] = v;
+                float[] b = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
+                for (int c = 0; c < 8; c++) {
+                    Vector4f p = new Vector4f(((c & 1) == 0 ? cube.minX : cube.maxX) / 16f,
+                            ((c & 2) == 0 ? cube.minY : cube.maxY) / 16f, ((c & 4) == 0 ? cube.minZ : cube.maxZ) / 16f, 1f);
+                    pose.pose().transform(p);
+                    b[0] = Math.min(b[0], p.x()); b[1] = Math.min(b[1], p.y()); b[2] = Math.min(b[2], p.z());
+                    b[3] = Math.max(b[3], p.x()); b[4] = Math.max(b[4], p.y()); b[5] = Math.max(b[5], p.z());
+                }
+                System.arraycopy(b, 0, best, 0, 6);
+            });
+        }
+        return best;
     }
 
     /** Габариты кубов деталей в блоках (как их рисует render: позы деталей + координаты кубов / 16). */

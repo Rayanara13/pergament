@@ -43,6 +43,8 @@ public class SettingsScreen extends Screen {
                 () -> toggle(PergamentConfig.ENTITIES_ON_MINIMAP), () -> toggle(PergamentConfig.ENTITIES_ON_MINIMAP)));
         rows.add(new Row(T.t("set.marker_scale"), () -> PergamentConfig.MARKER_SCALE.get() + "%",
                 () -> step(PergamentConfig.MARKER_SCALE, -25, 50, 300), () -> step(PergamentConfig.MARKER_SCALE, 25, 50, 300)));
+        rows.add(new Row(T.t("set.toponyms"), () -> PergamentConfig.TOPONYMS.get() ? T.t("val.shown_pl") : T.t("val.hidden_pl"),
+                () -> toggle(PergamentConfig.TOPONYMS), () -> toggle(PergamentConfig.TOPONYMS)));
         rows.add(new Row(T.t("set.waypoints"), () -> PergamentConfig.WAYPOINTS.get() ? T.t("val.shown_pl") : T.t("val.hidden_pl"),
                 () -> toggle(PergamentConfig.WAYPOINTS), () -> toggle(PergamentConfig.WAYPOINTS)));
         rows.add(new Row(T.t("set.deaths"), () -> PergamentConfig.DEATH_KEEP.get() == 0 ? T.t("val.never")

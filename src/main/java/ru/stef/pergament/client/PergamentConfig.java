@@ -16,6 +16,7 @@ public final class PergamentConfig {
     public static final ForgeConfigSpec.IntValue DEATH_KEEP;
     public static final ForgeConfigSpec.IntValue MARKER_SCALE;
     public static final ForgeConfigSpec.BooleanValue WAYPOINTS;
+    public static final ForgeConfigSpec.BooleanValue TOPONYMS;
     public static final ForgeConfigSpec.BooleanValue MINIMAP;
     public static final ForgeConfigSpec.IntValue MINIMAP_SIZE;
     public static final ForgeConfigSpec.BooleanValue MINIMAP_CLOCK;
@@ -35,6 +36,8 @@ public final class PergamentConfig {
         b.push("style");
         COLOR_KEEP = b.comment("How much real block color shows through the parchment: 0 — paper only, 1 — as in game", "Сколько настоящего цвета блоков проступает сквозь пергамент: 0 — одна бумага, 1 — как в игре")
                 .defineInRange("colorKeep", 0.8, 0.2, 1.0);
+        TOPONYMS = b.comment("Place names on the map: lakes, rivers, seas, mountain ranges, volcanoes (from your own exploration)",
+                "Подписи местности на карте: озёра, реки, моря, хребты, вулканы (по своей разведке)").define("placeNames", true);
         b.pop();
         b.push("entities");
         SHOW_PLAYERS = b.comment("Other players (within render distance) — skin head", "Другие игроки (в пределах прорисовки) — головой со скина").define("players", true);

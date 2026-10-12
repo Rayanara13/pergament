@@ -39,6 +39,9 @@ public final class ClientSetup {
         MinecraftForge.EVENT_BUS.addListener(ClientSetup::onClientTick);
         MinecraftForge.EVENT_BUS.addListener(ClientSetup::onLogout);
         MinecraftForge.EVENT_BUS.addListener(OreWatch::onChat);
+        MinecraftForge.EVENT_BUS.addListener(MarkerShare::onChat);
+        MinecraftForge.EVENT_BUS.addListener(MarkerShare::onRegisterCommands);
+        MinecraftForge.EVENT_BUS.addListener(MarkerShare::onMouse);
         MinecraftForge.EVENT_BUS.addListener(Deaths::onScreen);
         MinecraftForge.EVENT_BUS.addListener(ru.stef.pergament.client.gui.WorldMarkers::capture);
         TeamClient.init();
@@ -83,6 +86,7 @@ public final class ClientSetup {
 
     private static void onLogout(ClientPlayerNetworkEvent.LoggingOut e) {
         ru.stef.pergament.client.xaero.XaeroImport.cancel();
+        ru.stef.pergament.client.geo.BiomeCat.clear();
         LocalMap.get().close();
     }
 }

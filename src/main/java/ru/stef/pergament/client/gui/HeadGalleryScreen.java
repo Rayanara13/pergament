@@ -39,6 +39,15 @@ public final class HeadGalleryScreen extends Screen {
                 // не создаётся вне мира — пропуск
             }
         }
+        String dbg = System.getProperty("pergament.selftest.headdebug");   // самотест: какие детали выбраны головой
+        if (dbg != null) {
+            for (LivingEntity e : mobs) {
+                String id = BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).toString();
+                if (java.util.Arrays.stream(dbg.split(",")).anyMatch(id::endsWith)) {
+                    ru.stef.pergament.Pergament.LOG.info("HEADDEBUG {} {}", id, MobHeads.describe(e));
+                }
+            }
+        }
     }
 
     public int pages() {

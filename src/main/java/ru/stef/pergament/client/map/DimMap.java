@@ -44,6 +44,8 @@ public final class DimMap {
     private Markers markers;
     private Drawings drawings;
     private Finds finds;
+    private Toponymy toponymy;
+    private final String salt;
 
     private static final class Tex {
         ResourceLocation loc;
@@ -55,6 +57,7 @@ public final class DimMap {
 
     DimMap(String profile, String dim, Path dir) {
         this.dim = dim;
+        this.salt = profile + "|" + dim;
         this.dir = dir;
         this.texKey = Integer.toHexString((profile + "|" + dim).hashCode());
     }
@@ -75,6 +78,12 @@ public final class DimMap {
     public Finds finds() {
         if (finds == null) finds = Finds.load(dir.resolve("finds.json"));
         return finds;
+    }
+
+    /** Подписи местности этого измерения. */
+    public Toponymy toponymy() {
+        if (toponymy == null) toponymy = new Toponymy(dir, salt);
+        return toponymy;
     }
 
     public MinerPlan miner() {
@@ -160,6 +169,7 @@ public final class DimMap {
     }
 
     void saveDirty() {
+        if (toponymy != null) toponymy.save();
         for (RegionData r : regions.values()) {
             if (!r.dirty()) continue;
             RegionData snap = r.snapshot();

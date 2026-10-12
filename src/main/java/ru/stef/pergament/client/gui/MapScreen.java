@@ -49,6 +49,8 @@ public class MapScreen extends Screen {
     static Markers.Marker editing;            // открытая в панели метка (копия)
     static boolean listOpen;
     private static String listQuery = "";
+    private static boolean listOres;          // левый список: метки или жилы (поиск руды)
+    private static String oreQuery = "";
     private static double listScroll;
     private static final List<int[]> ruler = new ArrayList<>();
     private static int penColor = 1;
@@ -61,6 +63,7 @@ public class MapScreen extends Screen {
     private Drawings.Stroke stroke;           // штрих, который рисуется сейчас
     private double pressX, pressY;
     private boolean dragged;
+    private boolean swallow;                  // нажатие съели кнопка/окно значков — отпускание не должно ставить метку
     private int[] testMouse;                  // самотест: «мышь» без мыши
     private int x0, y0, x1, y1;
     private int toolX, toolY, toolRight = 28;      // раскладка панели инструментов (переносится во 2-й столбец)
@@ -118,6 +121,13 @@ public class MapScreen extends Screen {
 
         int subY = 3 + font.lineHeight + 11 + font.lineHeight + 9;
         switch (tool) {
+            case MARKER -> addRenderableWidget(new PaperButton(width / 2 - 50, subY, 100, T.c("marker.by_coords"),
+                    () -> false, () -> {
+                        var p = minecraft.player;
+                        var m = new Markers.Marker();
+                        if (p != null) { m.x = p.getBlockX(); m.y = p.getBlockY(); m.z = p.getBlockZ(); }
+                        openMarker(m);                             // координаты — правятся в панели
+                    }));
             case ROUTE -> {
                 RoutePlan plan = RoutePlan.get();
                 addRenderableWidget(new PaperButton(width / 2 - 52, subY, 50, T.c("button.undo"), () -> false, plan::undo));
@@ -255,6 +265,12 @@ public class MapScreen extends Screen {
         listOpen = open;
     }
 
+    /** Самотест: левый список на вкладке «Руды» (или закрыть). */
+    public static void oresForTest(boolean open) {
+        listOpen = open;
+        listOres = open;
+    }
+
     /** Самотест: линейка и штрих пером без рук. */
     public static void debugRuler(int[]... pts) {
         ruler.clear();
@@ -271,8 +287,13 @@ public class MapScreen extends Screen {
         var drawings = LocalMap.get().drawings();
         if (drawings != null) for (var s : drawings.all()) drawStroke(g, s);
         if (stroke != null) drawStroke(g, stroke);
+        var shownMap = LocalMap.get().shown();
+        if (shownMap != null && ru.stef.pergament.client.PergamentConfig.TOPONYMS.get()) {
+            TopoOverlay.draw(g, font, this, shownMap.toponymy().labels());     // подписи — под жилами и метками
+        }
         var veins = showVeins ? VeinOverlay.visible(this) : List.<Veins.Vein>of();
         VeinOverlay.draw(g, this, veins);
+        VeinOverlay.drawFlash(g, this);
         MinerPlan plan = Veins.source() != null && tool == Tool.MINER ? LocalMap.get().miner() : null;
         if (plan != null) MinerOverlay.draw(g, this, plan);              // сетка видна, только пока кирка включена
         var marks = LocalMap.get().markers();
@@ -282,6 +303,9 @@ public class MapScreen extends Screen {
         MarkerOverlay.draw(g, font, this, markList, editing == null ? null : editing.id);
         EntityMarks.drawMobs(g, this::sx, this::sy, partial, zoom >= 2 ? 10 : 8, 0, 0, width, height);
         EntityMarks.drawPlayers(g, font, this::sx, this::sy, partial, zoom >= 2 ? 14 : 12, true);
+        // головы мобов объёмные (глубина до ~160) — без сброса глубины пробивают панели, кнопки и подсказки поверх
+        g.flush();
+        com.mojang.blaze3d.systems.RenderSystem.clear(org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT, net.minecraft.client.Minecraft.ON_OSX);
         g.renderOutline(0, 0, width, height, Paper.INK);
         drawTitle(g);
         drawStatus(g, mouseX, mouseY);
@@ -405,8 +429,14 @@ public class MapScreen extends Screen {
     }
 
     /** Под заголовком — что сейчас делает клик. */
+    /** Середина свободной части карты: без панели инструментов, списка и панели метки. */
+    private int freeCenter(int w) {
+        int l = listOpen ? LIST_X + LIST_W + 4 : toolRight + 4, r = editing != null ? width - PANEL_W - 4 : width;
+        return Math.max(l, Math.min((l + r - w) / 2, r - w));
+    }
+
     private void drawHint(GuiGraphics g, String t) {
-        int w = font.width(t) + 16, x = (width - w) / 2, y = 3 + font.lineHeight + 11;
+        int w = font.width(t) + 16, x = freeCenter(w), y = 3 + font.lineHeight + 11;
         Paper.plaque(g, x, y, x + w, y + font.lineHeight + 6);
         g.drawString(font, t, x + 8, y + 4, Paper.RED, false);
     }
@@ -414,7 +444,7 @@ public class MapScreen extends Screen {
     /** Табличка сверху: мир · измерение. */
     private void drawTitle(GuiGraphics g) {
         String t = worldName() + "  ·  " + dimName();
-        int w = font.width(t) + 20, x = (width - w) / 2;
+        int w = font.width(t) + 20, x = freeCenter(w);
         Paper.plaque(g, x, 3, x + w, 3 + font.lineHeight + 8);
         g.drawString(font, t, x + 10, 8, Paper.INK, false);
     }
@@ -459,7 +489,7 @@ public class MapScreen extends Screen {
     }
 
     /** Название измерения из переводов игры (в TFG — «Земля», «Бездна», «Луна», «Орбита Марса»…). */
-    static String dimLabel(String id) {
+    public static String dimLabel(String id) {
         if (id == null) return "";
         var rl = net.minecraft.resources.ResourceLocation.tryParse(id);
         if (rl != null) {
@@ -488,13 +518,82 @@ public class MapScreen extends Screen {
     // ---------- список меток (слева) ----------
 
     private void initList() {
+        if (Veins.source() == null) listOres = false;
+        else {                                                 // вкладки: метки | руды (жилы — только при GTCEu)
+            int tw = (LIST_W - 20) / 2;
+            addRenderableWidget(new PaperButton(LIST_X + 8, 8, tw, T.c("list.tab_markers"), () -> !listOres,
+                    () -> { listOres = false; listScroll = 0; rebuildWidgets(); }));
+            addRenderableWidget(new PaperButton(LIST_X + 12 + tw, 8, tw, T.c("list.tab_ores"), () -> listOres,
+                    () -> { listOres = true; listScroll = 0; rebuildWidgets(); }));
+        }
         var search = new EditBox(font, LIST_X + 10, 30, LIST_W - 20, 12, T.c("list.search"));
         search.setBordered(false);
         search.setTextColor(0x3A2814);
         search.setMaxLength(40);
-        search.setValue(listQuery);
-        search.setResponder(s -> { listQuery = s; listScroll = 0; });
+        search.setValue(listOres ? oreQuery : listQuery);
+        search.setResponder(s -> {
+            if (listOres) oreQuery = s; else listQuery = s;
+            listScroll = 0;
+        });
         addRenderableWidget(search);
+    }
+
+    /** Жилы для поиска: по названию жилы и её материалов, ближние — первыми. */
+    private List<Veins.Vein> oresListed() {
+        String q = oreQuery.toLowerCase(Locale.ROOT).trim();
+        double ox = cx, oz = cz;                           // в чужом измерении (глобус) — от центра карты
+        if (minecraft.player != null && !LocalMap.get().viewingOther()) { ox = minecraft.player.getX(); oz = minecraft.player.getZ(); }
+        List<Veins.Vein> out = new ArrayList<>();
+        for (Veins.Vein v : VeinOverlay.all(this)) {
+            boolean hit = q.isEmpty() || v.name().toLowerCase(Locale.ROOT).contains(q);
+            for (Veins.Mat m : v.mats()) hit |= m.name().toLowerCase(Locale.ROOT).contains(q);
+            if (hit) out.add(v);
+        }
+        double fx = ox, fz = oz;
+        out.sort(Comparator.comparingDouble(v -> Math.hypot(v.x() - fx, v.z() - fz)));
+        return out;
+    }
+
+    private void drawOres(GuiGraphics g, int mouseX, int mouseY) {
+        int top = 4, bottom = height - 30;
+        Paper.plaque(g, LIST_X, top, LIST_X + LIST_W, bottom);
+        List<Veins.Vein> items = oresListed();
+        g.fill(LIST_X + 8, 26, LIST_X + LIST_W - 8, 42, 0xFFF8EED4);
+        g.renderOutline(LIST_X + 8, 26, LIST_W - 16, 16, Paper.INK);
+        if (oreQuery.isEmpty()) g.drawString(font, T.t("ores.search_hint"), LIST_X + 12, 30, Paper.INK_FAINT, false);
+        if (items.isEmpty()) g.drawString(font, font.plainSubstrByWidth(T.t("ores.empty"), LIST_W - 16), LIST_X + 8, 52, Paper.INK_SOFT, false);
+        double ox = cx, oz = cz;
+        if (minecraft.player != null && !LocalMap.get().viewingOther()) { ox = minecraft.player.getX(); oz = minecraft.player.getZ(); }
+        int y = 48 - (int) listScroll;
+        g.enableScissor(LIST_X + 2, 46, LIST_X + LIST_W - 2, bottom - 2);
+        for (Veins.Vein v : items) {
+            if (y > 30 && y < bottom) {
+                boolean hover = mouseX >= LIST_X + 4 && mouseX < LIST_X + LIST_W - 4 && mouseY >= y && mouseY < y + ROW
+                        && mouseY > 46 && mouseY < bottom;
+                if (hover) g.fill(LIST_X + 4, y, LIST_X + LIST_W - 4, y + ROW, 0x553A2814);
+                int rgb = v.mats().isEmpty() ? 0x808080 : v.mats().get(0).rgb();
+                VeinOverlay.diamond(g, LIST_X + 15, y + 8, 5, Paper.INK);
+                VeinOverlay.diamond(g, LIST_X + 15, y + 8, 4, v.depleted() ? 0xFFF1E4C0 : 0xFF000000 | rgb);
+                String dist = T.t("unit.blocks", Math.round(Math.hypot(v.x() - ox, v.z() - oz)));
+                int dw = font.width(dist);
+                g.drawString(font, font.plainSubstrByWidth(v.name(), LIST_W - 40 - dw), LIST_X + 28, y + 5,
+                        v.depleted() ? Paper.INK_FAINT : Paper.INK, false);
+                g.drawString(font, dist, LIST_X + LIST_W - 10 - dw, y + 5, Paper.INK_SOFT, false);
+            }
+            y += ROW;
+        }
+        g.disableScissor();
+        if (mouseX >= LIST_X + 4 && mouseX < LIST_X + LIST_W - 4 && mouseY > 46 && mouseY < bottom) {
+            Veins.Vein hv = oreRowAt(mouseX, mouseY);
+            if (hv != null) VeinOverlay.drawTip(g, font, this, hv, mouseX, mouseY);
+        }
+    }
+
+    private Veins.Vein oreRowAt(double mx, double my) {
+        if (!listOpen || !listOres || mx < LIST_X + 4 || mx >= LIST_X + LIST_W - 4 || my < 46 || my > height - 32) return null;
+        int k = (int) Math.floor((my - 48 + listScroll) / ROW);
+        List<Veins.Vein> items = oresListed();
+        return k >= 0 && k < items.size() ? items.get(k) : null;
     }
 
     /** Отфильтрованные и упорядоченные по расстоянию метки — так же, как в списке. */
@@ -510,10 +609,14 @@ public class MapScreen extends Screen {
     }
 
     private void drawList(GuiGraphics g, List<Markers.Marker> all, int mouseX, int mouseY) {
+        if (listOres) {
+            drawOres(g, mouseX, mouseY);
+            return;
+        }
         int top = 4, bottom = height - 30;
         Paper.plaque(g, LIST_X, top, LIST_X + LIST_W, bottom);
         List<Markers.Marker> items = listed(all);
-        g.drawString(font, T.t("list.title", items.size()), LIST_X + 8, top + 8, Paper.INK, false);
+        if (Veins.source() == null) g.drawString(font, T.t("list.title", items.size()), LIST_X + 8, top + 8, Paper.INK, false);
         g.fill(LIST_X + 8, 26, LIST_X + LIST_W - 8, 42, 0xFFF8EED4);
         g.renderOutline(LIST_X + 8, 26, LIST_W - 16, 16, Paper.INK);
         if (listQuery.isEmpty()) g.drawString(font, T.t("list.search_hint"), LIST_X + 12, 30, Paper.INK_FAINT, false);
@@ -537,7 +640,7 @@ public class MapScreen extends Screen {
     }
 
     private Markers.Marker listRowAt(double mx, double my) {
-        if (!listOpen || mx < LIST_X + 4 || mx >= LIST_X + LIST_W - 4 || my < 46 || my > height - 32) return null;
+        if (!listOpen || listOres || mx < LIST_X + 4 || mx >= LIST_X + LIST_W - 4 || my < 46 || my > height - 32) return null;
         var marks = LocalMap.get().markers();
         if (marks == null) return null;
         int k = (int) Math.floor((my - 48 + listScroll) / ROW);
@@ -569,7 +672,25 @@ public class MapScreen extends Screen {
 
     private void initPanel() {
         int px = width - PANEL_W - 4 + 8, w = PANEL_W - 16;
-        var name = new EditBox(font, px + 4, 64, w - 8, 12, T.c("marker.name"));
+        // координаты — правятся: так метку двигают и ставят по известным X/Y/Z
+        int slot = (w - 22) / 3;                              // координаты — в шапке, правее значка
+        int[] cur = {editing.x, editing.y, editing.z};
+        for (int k = 0; k < 3; k++) {
+            int axis = k;
+            var c = new EditBox(font, px + 22 + k * slot + 9, 25, slot - 10, 12, Component.literal("XYZ".substring(k, k + 1)));
+            c.setBordered(false);
+            c.setTextColor(0x3A2814);
+            c.setMaxLength(9);
+            c.setFilter(v -> v.matches("-?\\d{0,8}"));
+            c.setValue(Integer.toString(cur[k]));
+            c.setResponder(v -> {
+                if (editing == null || !v.matches("-?\\d{1,8}")) return;
+                int n = Integer.parseInt(v);
+                if (axis == 0) editing.x = n; else if (axis == 1) editing.y = n; else editing.z = n;
+            });
+            addRenderableWidget(c);
+        }
+        var name = new EditBox(font, px + 4, 66, w - 8, 12, T.c("marker.name"));
         name.setBordered(false);
         name.setTextColor(0x3A2814);
         name.setMaxLength(40);
@@ -583,9 +704,9 @@ public class MapScreen extends Screen {
         desc.setValue(editing.desc);
         desc.setResponder(s -> editing.desc = s);
         addRenderableWidget(desc);
-        addRenderableWidget(new PaperButton(px, 134, w, T.c("marker.choose_icon"), () -> picker,
+        addRenderableWidget(new PaperButton(px, 132, w, T.c("marker.choose_icon"), () -> picker,
                 () -> { picker = true; iconScroll = 0; }));
-        addRenderableWidget(new PaperButton(px, 156, w, Component.literal(""), () -> editing != null && editing.world,
+        addRenderableWidget(new PaperButton(px, 154, w, Component.literal(""), () -> editing != null && editing.world,
                 () -> { if (editing != null) editing.world = !editing.world; }) {
             @Override
             public Component getMessage() {                       // надпись — по текущему состоянию
@@ -593,6 +714,8 @@ public class MapScreen extends Screen {
             }
         });
         int by = height - 30, bw = (w - 6) / 2;
+        addRenderableWidget(new PaperButton(px, 176, w, T.c("share.send"), () -> false,   // в общий чат — как есть в панели
+                () -> { if (editing != null) ru.stef.pergament.client.MarkerShare.send(editing, LocalMap.get().shownDimension()); }));
         addRenderableWidget(new PaperButton(px, by - 18, bw, T.c("button.save"), () -> false, () -> {
             var ms = LocalMap.get().markers();
             if (ms != null) {
@@ -622,14 +745,19 @@ public class MapScreen extends Screen {
         Paper.plaque(g, x0p, 4, width - 4, height - 4);
         g.blit(MarkerOverlay.icon(editing.icon), px, 12, 0, 0, 16, 16, 16, 16);
         g.drawString(font, editing.name.isEmpty() ? T.t("marker.new") : editing.name, px + 22, 12, Paper.INK, false);
-        g.drawString(font, "X " + editing.x + "  Y " + editing.y + "  Z " + editing.z, px + 22, 24, Paper.INK_SOFT, false);
-        g.drawString(font, dimName() + MarkerOverlay.distance(editing), px, 36, Paper.INK_SOFT, false);
-        int w = PANEL_W - 16;
-        g.drawString(font, T.t("marker.name"), px, 50, Paper.INK, false);
-        field(g, px, 60, w);
+        int w = PANEL_W - 16, slot = (w - 22) / 3;
+        for (int k = 0; k < 3; k++) {
+            int x = px + 22 + k * slot;
+            g.drawString(font, "XYZ".substring(k, k + 1), x, 25, Paper.INK_SOFT, false);
+            g.fill(x + 7, 22, x + slot, 36, 0xFFF8EED4);
+            g.renderOutline(x + 7, 22, slot - 7, 14, Paper.INK);
+        }
+        g.drawString(font, dimName() + MarkerOverlay.distance(editing), px, 40, Paper.INK_SOFT, false);
+        g.drawString(font, T.t("marker.name"), px, 52, Paper.INK, false);
+        field(g, px, 62, w);
         g.drawString(font, T.t("marker.desc"), px, 86, Paper.INK, false);
         field(g, px, 96, w);
-        g.drawString(font, T.t("marker.icon", Markers.iconName(editing.icon)), px, 122, Paper.INK, false);
+        g.drawString(font, T.t("marker.icon", Markers.iconName(editing.icon)), px, 120, Paper.INK, false);
     }
 
     // ---------- окно выбора значка (поверх карты) ----------
@@ -720,9 +848,14 @@ public class MapScreen extends Screen {
             if (ic != null && editing != null) editing.icon = ic.id();
             int[] r = pickerRect();
             if (ic != null || mx < r[0] || mx > r[2] || my < r[1] || my > r[3]) picker = false;  // выбрал или мимо окна
+            swallow = true;          // окно закрылось на нажатии — отпускание уже над картой, метку оно ставить не должно
             return true;
         }
-        if (super.mouseClicked(mx, my, button)) return true;      // кнопки и поля
+        if (super.mouseClicked(mx, my, button)) {                 // кнопки и поля («Сохранить» закрывает панель —
+            swallow = true;                                       // отпускание на её месте не должно ставить метку)
+            return true;
+        }
+        swallow = false;
         pressX = mx;
         pressY = my;
         dragged = false;
@@ -766,6 +899,10 @@ public class MapScreen extends Screen {
 
     @Override
     public boolean mouseReleased(double mx, double my, int button) {
+        if (swallow) {
+            swallow = false;
+            return super.mouseReleased(mx, my, button);
+        }
         if (picker) return true;
         if (tool == Tool.PEN && button == 0) {
             var d = LocalMap.get().drawings();
@@ -776,8 +913,21 @@ public class MapScreen extends Screen {
         if (button == 1 && !dragged) {                                     // правый клик — убрать последнюю точку
             if (tool == Tool.RULER && !ruler.isEmpty()) { ruler.remove(ruler.size() - 1); return true; }
             if (tool == Tool.ROUTE) { RoutePlan.get().undo(); return true; }
+            if (overMap(mx, my)) {                                         // иначе — метка здесь (или открыть ту, что под курсором)
+                var marks = LocalMap.get().markers();
+                var hit = marks == null ? null : MarkerOverlay.hovered(this, marks.all(), mx, my);
+                openMarker(hit != null ? hit.copy() : markerAt((int) Math.floor(wx(mx)), (int) Math.floor(wz(my))));
+                return true;
+            }
         }
         boolean click = button == 0 && !dragged;
+        Veins.Vein ore = click ? oreRowAt(mx, my) : null;
+        if (ore != null) {                                                 // жила из поиска — к ней, и подсветить
+            cx = ore.x() + 0.5;
+            cz = ore.z() + 0.5;
+            VeinOverlay.flash(ore);
+            return true;
+        }
         Markers.Marker row = click ? listRowAt(mx, my) : null;
         if (row != null) {
             cx = row.x + 0.5;
@@ -798,14 +948,7 @@ public class MapScreen extends Screen {
         switch (tool) {
             case ROUTE -> RoutePlan.get().add(bx, bz);
             case RULER -> ruler.add(new int[]{bx, bz});
-            case MARKER -> {
-                var m = new Markers.Marker();
-                m.x = bx;
-                m.z = bz;
-                Integer h = LocalMap.get().heightAt(bx, bz);
-                m.y = h != null ? h : minecraft.player == null ? 64 : minecraft.player.getBlockY();
-                openMarker(m);
-            }
+            case MARKER -> openMarker(markerAt(bx, bz));
             case MINER -> {
                 MinerPlan plan = LocalMap.get().miner();
                 if (plan != null && Veins.source() != null) {
@@ -816,6 +959,16 @@ public class MapScreen extends Screen {
             default -> { return super.mouseReleased(mx, my, button); }
         }
         return true;
+    }
+
+    /** Новая метка в блоке (bx, bz): высота — с карты, нет её — игрока. */
+    private Markers.Marker markerAt(int bx, int bz) {
+        var m = new Markers.Marker();
+        m.x = bx;
+        m.z = bz;
+        Integer h = LocalMap.get().heightAt(bx, bz);
+        m.y = h != null ? h : minecraft.player == null ? 64 : minecraft.player.getBlockY();
+        return m;
     }
 
     @Override

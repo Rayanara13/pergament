@@ -62,6 +62,65 @@ final class VeinOverlay {
         return cached;
     }
 
+    private static List<Veins.Vein> wide = List.of();
+    private static long wideAt;
+    private static String wideKey = "";
+
+    /**
+     * Все жилы для поиска: подтверждённые (свои и команды) показываемого измерения и кэш GT в 4096 блоках вокруг
+     * игрока (только в его измерении). Пересчёт — раз в секунду.
+     */
+    static List<Veins.Vein> all(MapScreen v) {
+        Minecraft mc = Minecraft.getInstance();
+        Veins.Source src = Veins.source();
+        String dim = ru.stef.pergament.client.map.LocalMap.get().shownDimension();
+        long now = System.currentTimeMillis();
+        if (src == null || mc.level == null || mc.player == null || dim == null) return List.of();
+        if (dim.equals(wideKey) && now - wideAt < 1000) return wide;
+        List<Veins.Vein> out = new ArrayList<>();
+        var finds = ru.stef.pergament.client.map.LocalMap.get().finds();
+        if (finds != null) {
+            for (var f : finds.all()) {
+                List<String> by = new ArrayList<>();
+                if (f.byIndicator) by.add(T.t("vein.by_indicator"));
+                if (f.byProspector) by.add(T.t("vein.by_prospector"));
+                if (f.byHand) by.add(T.t("vein.by_hand"));
+                out.add(new Veins.Vein(f.x, f.y, f.z, Math.max(6, f.spread), f.name, List.of(new Veins.Mat(f.name, f.rgb)), false,
+                        T.t("vein.confirmed", String.join(" + ", by), f.count, f.minY, f.maxY)));
+            }
+        }
+        if (mc.level.dimension().location().toString().equals(dim)) {
+            int r = 4096, px = mc.player.getBlockX(), pz = mc.player.getBlockZ();
+            try {
+                out.addAll(src.inArea(mc.level.dimension(), px - r, pz - r, 2 * r, 2 * r));
+            } catch (RuntimeException e) {
+                // кэш GT меняется под нами — через секунду ещё раз
+            }
+        }
+        wide = out;
+        wideAt = now;
+        wideKey = dim;
+        return out;
+    }
+
+    /** Подсветка жилы, выбранной в поиске: пульсирующее кольцо несколько секунд. */
+    private static Veins.Vein flash;
+    private static long flashUntil;
+
+    static void flash(Veins.Vein vein) {
+        flash = vein;
+        flashUntil = System.currentTimeMillis() + 4000;
+    }
+
+    static void drawFlash(GuiGraphics g, MapScreen v) {
+        long now = System.currentTimeMillis();
+        if (flash == null || now > flashUntil) return;
+        int cx = (int) Math.round(v.sx(flash.x() + 0.5)), cy = (int) Math.round(v.sy(flash.z() + 0.5));
+        double t = (now % 1000) / 1000.0;
+        ring(g, cx, cy, 8 + 14 * t, ((int) (255 * (1 - t)) << 24) | (Paper.RED & 0xFFFFFF));
+        ring(g, cx, cy, 8 + 14 * t + 1, ((int) (255 * (1 - t)) << 24) | (Paper.RED & 0xFFFFFF));
+    }
+
     static void draw(GuiGraphics g, MapScreen v, List<Veins.Vein> veins) {
         for (Veins.Vein vein : veins) {
             int cx = (int) Math.round(v.sx(vein.x() + 0.5)), cy = (int) Math.round(v.sy(vein.z() + 0.5));
@@ -100,7 +159,7 @@ final class VeinOverlay {
         Tip.draw(g, font, lines, mx, my, v.width, v.height);
     }
 
-    private static void diamond(GuiGraphics g, int cx, int cy, int r, int color) {
+    static void diamond(GuiGraphics g, int cx, int cy, int r, int color) {
         for (int dy = -r; dy <= r; dy++) {
             int w = r - Math.abs(dy);
             g.fill(cx - w, cy + dy, cx + w + 1, cy + dy + 1, color);

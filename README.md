@@ -30,7 +30,12 @@ For team features, also put the same jar into the server's `mods` (FTB Teams req
   so resource packs and modded blocks look right.
 - **Only what you explored.** The map reveals around you as you move: 8 chunks ahead along your view,
   4 behind (configurable). No x-ray, no ores you have not found.
+- **Place names**: discovered lakes, rivers, seas, mountain ranges and volcanoes get a name
+  (Lake Baikal, Lena, Red Dragon Range…) written on the map like on a real chart. The name sticks to the place
+  and follows your game language.
 - **Markers** with 67 icons in 6 groups, names and descriptions; a searchable list.
+  Right-click the map to drop one anywhere; edit X/Y/Z to move it or to place it by coordinates.
+  **Share to chat**: anyone with Pergament gets a "+ to map" button (shared Xaero waypoints work too).
 - **Paths**: an A* route from A through any waypoints to B, over explored terrain only
   (water and steep climbs cost more).
 - **Ruler**, **pen** with colors and an eraser, **death markers** with the cause of death.
@@ -41,8 +46,8 @@ For team features, also put the same jar into the server's `mods` (FTB Teams req
 - **Import from Xaero's World Map**: bring the area you already explored with Xaero.
   It is parsed independently, recolored from real textures, and only fills empty areas.
 - **GregTech CEu (optional)**: confirmed ore veins (surface indicator with the vein really below it,
-  ore mined by hand, prospector results) and a miner grid planner.
-  TerraFirmaGreg prospector picks are supported automatically.
+  ore mined by hand, prospector results) and a miner grid planner; **ore search** — type "cassiterite",
+  get the nearest veins. TerraFirmaGreg prospector picks are supported automatically.
 - **FTB Teams (optional, needs the mod on the server too)**:
   - see party members on the map (only over explored terrain),
   - share the explored map with party members who also have Pergament —
@@ -75,7 +80,11 @@ Inspired by *MapMinecraft* by erkinpaw; all code and art are original.
   вода темнее на глубине. Цвета — из настоящих текстур блоков и тинта биома: ресурспаки и блоки модов выглядят как в игре.
 - **Только разведанное.** Карта открывается вокруг игрока: 8 чанков по взгляду, 4 за спиной (настраивается).
   Никакого рентгена и руд, которых ты не находил.
-- **Метки**: 67 значков в 6 группах, название, описание, список с поиском.
+- **Подписи местности**: открытые озёра, реки, моря, хребты и вулканы получают имя («Озеро Байкал», «Лена»,
+  «Хребет Красных Драконов»…) и подписываются на карте, как на настоящей. Имя держится за место и следует языку игры.
+- **Метки**: 67 значков в 6 группах, название, описание, список с поиском. Правый клик по карте — метка в любом месте;
+  X/Y/Z правятся — сдвинуть метку или поставить по координатам. **Поделиться в чат**: у кого есть Пергамент,
+  появится кнопка «+ на карту» (метки Xaero из чата — тоже).
 - **Тропы**: маршрут A* от A через любые точки до B только по разведанному (вода и крутые подъёмы дороже).
 - **Линейка**, **перо** с цветами и ластиком, **метки гибели** с причиной смерти.
 - **Игроки и мобы**: настоящие головы игроков; по желанию — головы мобов из их собственных моделей
@@ -84,7 +93,8 @@ Inspired by *MapMinecraft* by erkinpaw; all code and art are original.
 - **Импорт из Xaero's World Map**: перенести уже разведанное с Xaero. Разбирается самостоятельно, перекрашивается
   по настоящим текстурам и ложится только в пустые места.
 - **GregTech CEu (необязательно)**: подтверждённые жилы (индикатор на поверхности и жила под ним,
-  руда руками, проспектор) и шахтёр — сетка выработок. Проспекторские кирки TerraFirmaGreg поддерживаются сами.
+  руда руками, проспектор) и шахтёр — сетка выработок; **поиск руды** — пишешь «касситерит», видишь ближайшие жилы.
+  Проспекторские кирки TerraFirmaGreg поддерживаются сами.
 - **FTB Teams (необязательно, мод нужен и на сервере)**:
   - сокомандники на карте (только над разведанным),
   - обмен открытой картой с сокомандниками, у которых тоже Пергамент: при первом входе — вся своя карта,
