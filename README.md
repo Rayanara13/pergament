@@ -30,9 +30,11 @@ For team features, also put the same jar into the server's `mods` (FTB Teams req
   so resource packs and modded blocks look right.
 - **Only what you explored.** The map reveals around you as you move: 8 chunks ahead along your view,
   4 behind (configurable). No x-ray, no ores you have not found.
-- **Place names**: discovered lakes, rivers, seas, mountain ranges and volcanoes get a name
-  (Lake Baikal, Lena, Red Dragon Range…) written on the map like on a real chart. The name sticks to the place
-  and follows your game language.
+- **Place names**: discovered lakes, rivers, seas, mountain ranges, forests, deserts, swamps, islands, peaks
+  and volcanoes get a name (Lake Baikal, Lena, Red Dragon Range…) written on the map like on a real chart —
+  rivers along their course, the larger ones on the minimap too. Click a name to rename it. The name sticks
+  to the place and follows your game language; in an FTB party whoever discovered a place first names it
+  for everyone, and renames are shared.
 - **Markers** with 67 icons in 6 groups, names and descriptions; a searchable list.
   Right-click the map to drop one anywhere; edit X/Y/Z to move it or to place it by coordinates.
   **Share to chat**: anyone with Pergament gets a "+ to map" button (shared Xaero waypoints work too).
@@ -80,8 +82,10 @@ Inspired by *MapMinecraft* by erkinpaw; all code and art are original.
   вода темнее на глубине. Цвета — из настоящих текстур блоков и тинта биома: ресурспаки и блоки модов выглядят как в игре.
 - **Только разведанное.** Карта открывается вокруг игрока: 8 чанков по взгляду, 4 за спиной (настраивается).
   Никакого рентгена и руд, которых ты не находил.
-- **Подписи местности**: открытые озёра, реки, моря, хребты и вулканы получают имя («Озеро Байкал», «Лена»,
-  «Хребет Красных Драконов»…) и подписываются на карте, как на настоящей. Имя держится за место и следует языку игры.
+- **Подписи местности**: открытые озёра, реки, моря, хребты, леса, пустыни, болота, острова, вершины и вулканы
+  получают имя («Озеро Байкал», «Лена», «Хребет Красных Драконов»…) и подписываются на карте, как на настоящей:
+  реки — вдоль русла, крупное — и на миникарте. Клик по имени — переименовать. Имя держится за место и следует
+  языку игры; в команде FTB имя даёт тот, кто открыл первым, — для всех, и переименования общие.
 - **Метки**: 67 значков в 6 группах, название, описание, список с поиском. Правый клик по карте — метка в любом месте;
   X/Y/Z правятся — сдвинуть метку или поставить по координатам. **Поделиться в чат**: у кого есть Пергамент,
   появится кнопка «+ на карту» (метки Xaero из чата — тоже).

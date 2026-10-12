@@ -96,4 +96,32 @@ class TeamStoreTest {
         assertEquals(0, t.chunks());
         assertEquals(0, t.seq());
     }
+
+    private static ru.stef.pergament.net.TeamNet.TopoRec topo(String id, String custom, UUID fakeAuthor) {
+        return new ru.stef.pergament.net.TeamNet.TopoRec(id, "lake", 5L, "lake:3", custom, 999, 999, fakeAuthor);
+    }
+
+    @Test
+    void toponymsOrderedByServerAuthorFromConnectionAndSurviveRestart(@TempDir Path dir) throws Exception {
+        TeamStore s = TeamStore.open(dir);
+        String a = UUID.randomUUID().toString(), b = UUID.randomUUID().toString();
+        var ra = s.acceptTopo(OW, topo(a, "", B), A);                  // клиент врёт про порядок, ревизию и автора
+        assertEquals(1, ra.teamSeq());
+        assertEquals(A, ra.author());
+        var rb = s.acceptTopo(OW, topo(b, "", A), B);
+        assertEquals(2, rb.teamSeq());
+        var ren = s.acceptTopo(OW, topo(a, "Тапкино болото", B), B);   // переименовать может любой член команды
+        assertEquals("Тапкино болото", ren.custom());
+        assertEquals(1, ren.teamSeq());
+        assertEquals(A, ren.author());                                  // автор открытия не меняется
+        assertTrue(ren.rev() > rb.rev());
+        assertSame(ren, s.acceptTopo(OW, topo(a, "Тапкино болото", B), B));   // без изменений — та же ревизия
+        assertNull(s.acceptTopo("minecraft:the_nether", topo(a, "x", A), A)); // чужое измерение — нет
+        s.flushTopos();
+        TeamStore again = TeamStore.open(dir);
+        assertEquals(2, again.topos().size());
+        var next = again.acceptTopo(OW, topo(UUID.randomUUID().toString(), "", A), A);
+        assertEquals(3, next.teamSeq());                                // счётчики пережили перезапуск
+        assertTrue(next.rev() > ren.rev());
+    }
 }

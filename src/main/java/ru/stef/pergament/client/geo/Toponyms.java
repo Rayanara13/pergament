@@ -8,27 +8,44 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.LongPredicate;
 
 /**
  * Объекты местности и их имена. Из категорий чанков — области связности (8 соседей, без «мостов» через
- * неразведанное): озеро, река, море, хребет; вулкан — заметная вершина вулканических гор. Имя выдаётся объекту
- * один раз и держится за «якорь» — чанк объекта: при пересчёте область наследует имя записи, чей якорь в ней лежит;
- * слились две — остаётся старшая по счётчику (не по часам). Чистая логика — без Minecraft, под тесты.
+ * неразведанное): озеро, река, море, хребет, лес, пустыня, болото; остров — суша, со всех сторон окружённая разведанной
+ * водой; вулкан и вершина — заметные пики. Имя выдаётся объекту один раз и держится за «якорь» — чанк объекта:
+ * при пересчёте область наследует имя записи, чей якорь в ней лежит; слились две — остаётся старшая (командный
+ * порядок, затем свой счётчик — не часы). Чистая логика — без Minecraft, под тесты.
  */
 public final class Toponyms {
-    public static final String LAKE = "lake", RIVER = "river", SEA = "sea", RANGE = "range", VOLCANO = "volcano";
-    /** Меньше — не объект (лужа, ручей, холм). Озеро больше LAKE_TO_SEA чанков — море. */
-    static final int MIN_LAKE = 3, MIN_RIVER = 4, MIN_RANGE = 12, MIN_SEA = 40, LAKE_TO_SEA = 80;
-    /** Вулкан: вершина выше всех вулканических соседей в радиусе R и выше самого низкого из них на PROMINENCE. */
+    public static final String LAKE = "lake", RIVER = "river", SEA = "sea", RANGE = "range", VOLCANO = "volcano",
+            FOREST = "forest", DESERT = "desert", SWAMP = "swamp", ISLAND = "island", PEAK = "peak";
+    /** Меньше — не объект (лужа, ручей, холм, роща). Озеро больше LAKE_TO_SEA чанков — море. */
+    static final int MIN_LAKE = 3, MIN_RIVER = 4, MIN_RANGE = 12, MIN_SEA = 40, LAKE_TO_SEA = 80,
+            MIN_FOREST = 20, MIN_DESERT = 16, MIN_SWAMP = 6, MIN_ISLAND = 2, MAX_ISLAND = 3000;
+    /** Вулкан: выше всех вулканических соседей в радиусе VOLCANO_R и выше самого низкого из них на PROMINENCE. */
     static final int VOLCANO_R = 3, PROMINENCE = 20;
+    /** Вершина хребта: выше всех горных соседей в радиусе PEAK_R, над самым низким — PEAK_PROMINENCE, не ниже PEAK_MIN_Y. */
+    static final int PEAK_R = 4, PEAK_PROMINENCE = 30, PEAK_MIN_Y = 120;
 
     /** Выданное имя: тип, ссылка на имя, запасная строка, якорь, порядковый номер. */
     public static final class Item {
+        /** Постоянный id записи (по нему переименовывают и делятся с командой). */
+        public String id;
         public String type;
         public String nameId;
         public String name;
         public long anchor;
         public long seq;
+        /** Своё имя игрока (переименовал); null — выданное. */
+        public String custom;
+        /** Порядок в команде (сервер): кто открыл раньше. 0 — команде ещё не известно. */
+        public long teamSeq;
+    }
+
+    /** Старшинство записи: командный порядок важнее своего (своё, ещё не отданное команде, — после всех командных). */
+    static long rank(Item it) {
+        return it.teamSeq > 0 ? it.teamSeq : (1L << 40) + it.seq;
     }
 
     /** Реестр имён измерения (toponyms.json): счётчик и записи. */
@@ -37,8 +54,14 @@ public final class Toponyms {
         public List<Item> items = new ArrayList<>();
     }
 
-    /** Подпись на карте: имя, место (центр блока), размер объекта в блоках — для «влезает ли подпись». */
-    public record Label(String type, String nameId, String fallback, int x, int z, int sizeBlocks, int chunks) {}
+    /**
+     * Подпись на карте: запись, имя, место (центр блока), размер объекта в блоках — для «влезает ли подпись»;
+     * path — русло реки (центры чанков, в блоках: x0,z0,x1,z1…) или null.
+     */
+    public record Label(String itemId, String type, String nameId, String fallback, String custom, int x, int z,
+                        int sizeBlocks, int chunks, int[] path) {}
+
+    public record Result(List<Label> labels, boolean changed) {}
 
     private Toponyms() {}
 
@@ -52,7 +75,23 @@ public final class Toponyms {
             case Geo.LAKE -> LAKE;
             case Geo.RIVER -> RIVER;
             case Geo.MOUNTAINS, Geo.VOLCANIC -> RANGE;
+            case Geo.FOREST -> FOREST;
+            case Geo.DESERT -> DESERT;
+            case Geo.SWAMP -> SWAMP;
             default -> null;
+        };
+    }
+
+    private static int min(String type) {
+        return switch (type) {
+            case LAKE -> MIN_LAKE;
+            case RIVER -> MIN_RIVER;
+            case RANGE -> MIN_RANGE;
+            case FOREST -> MIN_FOREST;
+            case DESERT -> MIN_DESERT;
+            case SWAMP -> MIN_SWAMP;
+            case ISLAND -> MIN_ISLAND;
+            default -> MIN_SEA;
         };
     }
 
@@ -60,17 +99,57 @@ public final class Toponyms {
         return a.equals(b) || (a.equals(LAKE) || a.equals(SEA)) && (b.equals(LAKE) || b.equals(SEA));
     }
 
+    /** Области связности; comp — номер области у каждого чанка. */
+    private record Areas(List<LongArrayList> members, List<String> types, Long2IntOpenHashMap comp) {}
+
     /**
      * Пересчитать объекты и подписи. Реестр дополняется новыми именами (вызывающий сохраняет его, если вернулось
      * changed). salt — профиль мира и измерение: одно и то же место в разных мирах получит разные имена.
      */
     public static Result compute(Long2LongMap cells, Registry reg, String salt) {
-        boolean changed = false;
+        boolean[] changed = {false};
         Set<String> used = new HashSet<>();
-        for (Item it : reg.items) used.add(it.nameId);
+        for (Item it : reg.items) {
+            used.add(it.nameId);
+            if (it.id == null) {                                        // записи старого формата — дать id
+                it.id = java.util.UUID.randomUUID().toString();
+                changed[0] = true;
+            }
+        }
         List<Label> labels = new ArrayList<>();
 
-        // ---- области связности
+        // ---- озёра, реки, моря, хребты, леса, пустыни, болота
+        Areas a = areas(cells, k -> true, k -> group(Geo.cat(cells.get(k))));
+        for (int c = 0; c < a.members.size(); c++) {
+            String g = a.types.get(c);
+            if (g.equals(LAKE) && a.members.get(c).size() > LAKE_TO_SEA) a.types.set(c, SEA);
+        }
+        name(a, reg, salt, used, labels, changed);
+
+        // ---- острова: суша, у которой все соседи разведаны и все чужие соседи — открытая вода
+        LongPredicate land = k -> !Geo.openWater(Geo.cat(cells.get(k)));
+        Areas isl = areas(cells, land, k -> ISLAND);
+        List<LongArrayList> keep = new ArrayList<>();
+        List<String> keepTypes = new ArrayList<>();
+        Long2IntOpenHashMap keepComp = new Long2IntOpenHashMap();
+        keepComp.defaultReturnValue(-1);
+        for (int c = 0; c < isl.members.size(); c++) {
+            LongArrayList m = isl.members.get(c);
+            if (m.size() > MAX_ISLAND || !enclosed(cells, m, isl.comp, c)) continue;
+            for (int i = 0; i < m.size(); i++) keepComp.put(m.getLong(i), keep.size());
+            keep.add(m);
+            keepTypes.add(ISLAND);
+        }
+        name(new Areas(keep, keepTypes, keepComp), reg, salt, used, labels, changed);
+
+        // ---- вулканы и вершины
+        peaks(cells, reg, salt, used, labels, changed, VOLCANO, Geo.VOLCANIC, VOLCANO_R, PROMINENCE, Integer.MIN_VALUE);
+        peaks(cells, reg, salt, used, labels, changed, PEAK, Geo.MOUNTAINS, PEAK_R, PEAK_PROMINENCE, PEAK_MIN_Y);
+        return new Result(labels, changed[0]);
+    }
+
+    /** Области связности чанков, где type(k) не null и одинаков; inSet — какие чанки вообще рассматривать. */
+    private static Areas areas(Long2LongMap cells, LongPredicate inSet, java.util.function.LongFunction<String> type) {
         Long2IntOpenHashMap comp = new Long2IntOpenHashMap();
         comp.defaultReturnValue(-1);
         List<LongArrayList> comps = new ArrayList<>();
@@ -78,8 +157,9 @@ public final class Toponyms {
         LongArrayList stack = new LongArrayList();
         for (var e : cells.long2LongEntrySet()) {
             long k = e.getLongKey();
-            String g = group(Geo.cat(e.getLongValue()));
-            if (g == null || comp.get(k) >= 0) continue;
+            if (comp.get(k) >= 0 || !inSet.test(k)) continue;
+            String g = type.apply(k);
+            if (g == null) continue;
             int id = comps.size();
             LongArrayList members = new LongArrayList();
             comp.put(k, id);
@@ -92,34 +172,47 @@ public final class Toponyms {
                     for (int dx = -1; dx <= 1; dx++) {
                         if (dx == 0 && dz == 0) continue;
                         long n = key(x + dx, z + dz);
-                        if (comp.get(n) >= 0 || !cells.containsKey(n) || !g.equals(group(Geo.cat(cells.get(n))))) continue;
+                        if (comp.get(n) >= 0 || !cells.containsKey(n) || !inSet.test(n) || !g.equals(type.apply(n))) continue;
                         comp.put(n, id);
                         stack.add(n);
                     }
                 }
             }
             comps.add(members);
-            types.add(g.equals(LAKE) && members.size() > LAKE_TO_SEA ? SEA : g);
+            types.add(g);
         }
+        return new Areas(comps, types, comp);
+    }
 
-        // ---- имена: старшая запись реестра, чей якорь в области
-        Item[] owner = new Item[comps.size()];
-        for (Item it : reg.items) {
-            if (it.type.equals(VOLCANO)) continue;
-            int c = comp.get(it.anchor);
-            if (c < 0 || !compatible(it.type, types.get(c))) continue;
-            if (owner[c] == null || it.seq < owner[c].seq) owner[c] = it;
+    /** Остров: все соседи чанков области разведаны, а чужие — открытая вода. */
+    private static boolean enclosed(Long2LongMap cells, LongArrayList m, Long2IntOpenHashMap comp, int c) {
+        for (int i = 0; i < m.size(); i++) {
+            long k = m.getLong(i);
+            int x = kx(k), z = kz(k);
+            for (int dz = -1; dz <= 1; dz++) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    long n = key(x + dx, z + dz);
+                    if (comp.get(n) == c) continue;
+                    if (!cells.containsKey(n) || !Geo.openWater(Geo.cat(cells.get(n)))) return false;
+                }
+            }
         }
-        for (int c = 0; c < comps.size(); c++) {
-            LongArrayList m = comps.get(c);
-            String type = types.get(c);
-            int min = switch (type) {
-                case LAKE -> MIN_LAKE;
-                case RIVER -> MIN_RIVER;
-                case RANGE -> MIN_RANGE;
-                default -> MIN_SEA;
-            };
-            if (owner[c] == null && m.size() < min) continue;
+        return true;
+    }
+
+    /** Имена областям: старшая запись реестра, чей якорь в области; нет и область крупная — новая. Плюс подписи. */
+    private static void name(Areas a, Registry reg, String salt, Set<String> used, List<Label> labels, boolean[] changed) {
+        Item[] owner = new Item[a.members.size()];
+        for (Item it : reg.items) {
+            if (it.type.equals(VOLCANO) || it.type.equals(PEAK)) continue;
+            int c = a.comp.get(it.anchor);
+            if (c < 0 || !compatible(it.type, a.types.get(c))) continue;
+            if (owner[c] == null || rank(it) < rank(owner[c])) owner[c] = it;
+        }
+        for (int c = 0; c < a.members.size(); c++) {
+            LongArrayList m = a.members.get(c);
+            String type = a.types.get(c);
+            if (owner[c] == null && m.size() < min(type)) continue;
             double sx = 0, sz = 0;
             int x0 = Integer.MAX_VALUE, x1 = Integer.MIN_VALUE, z0 = Integer.MAX_VALUE, z1 = Integer.MIN_VALUE;
             for (int i = 0; i < m.size(); i++) {
@@ -140,50 +233,57 @@ public final class Toponyms {
             Item it = owner[c];
             if (it == null) {
                 it = newItem(reg, type, center, salt, used);
-                changed = true;
+                changed[0] = true;
             }
             int size = Math.max(x1 - x0, z1 - z0) * 16 + 16;
-            labels.add(new Label(type, it.nameId, it.name, kx(center) * 16 + 8, kz(center) * 16 + 8, size, m.size()));
+            int[] path = type.equals(RIVER) ? RiverPath.of(m) : null;
+            labels.add(new Label(it.id, type, it.nameId, it.name, it.custom, kx(center) * 16 + 8, kz(center) * 16 + 8,
+                    size, m.size(), path));
         }
+    }
 
-        // ---- вулканы
+    /** Заметные пики чанков категории cat: вулканы (VOLCANIC) или вершины хребтов (MOUNTAINS). */
+    private static void peaks(Long2LongMap cells, Registry reg, String salt, Set<String> used, List<Label> labels,
+                              boolean[] changed, String type, byte cat, int r, int prominence, int minY) {
         for (var e : cells.long2LongEntrySet()) {
             long v = e.getLongValue();
-            if (Geo.cat(v) != Geo.VOLCANIC) continue;
+            if (Geo.cat(v) != cat) continue;
             long k = e.getLongKey();
             int x = kx(k), z = kz(k), y = Geo.peakY(v), low = y;
+            if (y < minY) continue;
             boolean top = true;
-            for (int dz = -VOLCANO_R; dz <= VOLCANO_R && top; dz++) {
-                for (int dx = -VOLCANO_R; dx <= VOLCANO_R; dx++) {
+            for (int dz = -r; dz <= r && top; dz++) {
+                for (int dx = -r; dx <= r; dx++) {
                     if (dx == 0 && dz == 0) continue;
                     long n = key(x + dx, z + dz);
                     if (!cells.containsKey(n)) continue;
                     long nv = cells.get(n);
                     int ny = Geo.peakY(nv);
                     low = Math.min(low, ny);
-                    if (Geo.cat(nv) == Geo.VOLCANIC && (ny > y || ny == y && n < k)) { top = false; break; }
+                    byte nc = Geo.cat(nv);
+                    boolean rival = nc == cat || nc == Geo.MOUNTAINS || nc == Geo.VOLCANIC;
+                    if (rival && (ny > y || ny == y && n < k)) { top = false; break; }
                 }
             }
-            if (!top || y - low < PROMINENCE) continue;
+            if (!top || y - low < prominence) continue;
             Item it = null;
-            for (Item r : reg.items) {
-                if (!r.type.equals(VOLCANO)) continue;
-                if (Math.max(Math.abs(kx(r.anchor) - x), Math.abs(kz(r.anchor) - z)) > VOLCANO_R) continue;
-                if (it == null || r.seq < it.seq) it = r;
+            for (Item rr : reg.items) {
+                if (!rr.type.equals(type)) continue;
+                if (Math.max(Math.abs(kx(rr.anchor) - x), Math.abs(kz(rr.anchor) - z)) > r) continue;
+                if (it == null || rank(rr) < rank(it)) it = rr;
             }
             if (it == null) {
-                it = newItem(reg, VOLCANO, k, salt, used);
-                changed = true;
+                it = newItem(reg, type, k, salt, used);
+                changed[0] = true;
             }
-            labels.add(new Label(VOLCANO, it.nameId, it.name, x * 16 + Geo.peakLx(v), z * 16 + Geo.peakLz(v), 16, 1));
+            labels.add(new Label(it.id, type, it.nameId, it.name, it.custom, x * 16 + Geo.peakLx(v), z * 16 + Geo.peakLz(v),
+                    16, 1, null));
         }
-        return new Result(labels, changed);
     }
-
-    public record Result(List<Label> labels, boolean changed) {}
 
     private static Item newItem(Registry reg, String type, long anchor, String salt, Set<String> used) {
         Item it = new Item();
+        it.id = java.util.UUID.randomUUID().toString();
         it.type = type;
         it.anchor = anchor;
         it.seq = ++reg.seq;

@@ -25,6 +25,8 @@ public final class TeamServer {
     private static final int PERIOD = 10;
 
     private final Set<UUID> modded = new HashSet<>();
+    /** Протокол клиента (из Hello): с 2 — понимает имена местности. */
+    private final java.util.Map<UUID, Integer> protocols = new java.util.HashMap<>();
     private final Set<UUID> hadMates = new HashSet<>();
     private Teams teams = Teams.NONE;
     private int ticks;
@@ -49,21 +51,29 @@ public final class TeamServer {
 
     private void stop() {
         modded.clear();
+        protocols.clear();
         hadMates.clear();
         teams = Teams.NONE;
     }
 
     private void left(UUID id) {
         modded.remove(id);
+        protocols.remove(id);
         hadMates.remove(id);
     }
 
     public void hello(ServerPlayer p, int protocol) {
+        protocols.put(p.getUUID(), protocol);
         if (modded.add(p.getUUID())) Pergament.LOG.info("Пергамент: у {} есть мод (протокол {})", p.getGameProfile().getName(), protocol);
     }
 
     public boolean hasMod(UUID id) {
         return modded.contains(id);
+    }
+
+    /** Понимает ли клиент имена местности (протокол ≥ 2). */
+    public boolean topo(UUID id) {
+        return protocols.getOrDefault(id, 0) >= TeamNet.TOPO_PROTOCOL;
     }
 
     public Teams teams() {

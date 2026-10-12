@@ -153,6 +153,7 @@ public final class TeamSync {
                     fresh.epoch = s.epoch + 1;
                     sessions.put(p.getUUID(), fresh);
                     send(p, new TeamNet.TeamInfo(party));
+                    if (party != null && ts.topo(p.getUUID())) send(p, new TeamNet.TopoReady(party));   // только протоколу ≥ 2
                 }
             }
         }
@@ -172,9 +173,11 @@ public final class TeamSync {
         UUID who = p.getUUID();
         Session mine = s;
         Path dir = teamDir(team);
+        boolean topoOk = TeamServer.get().topo(who);
         io.execute(() -> {
             TeamStore st = store(team, dir);
             flush(st);                                                       // отдаём только то, что уже на диске
+            List<TeamStore.StoredTopo> names = topoOk ? st.topos() : List.of();   // имена — все (их немного)
             long wm = st.incarnation().equals(incarnation) ? watermark : 0;  // другое воплощение — с нуля
             List<TeamStore.Entry> list = st.since(wm);
             List<TeamStore.StoredFind> found = st.findsSince(wm);
@@ -182,6 +185,16 @@ public final class TeamSync {
             UUID inc = st.incarnation();
             server.execute(() -> {
                 if (sessions.get(who) != mine) return;
+                List<TeamStore.StoredTopo> byDim = new ArrayList<>(names);
+                byDim.sort(java.util.Comparator.comparing(TeamStore.StoredTopo::dim));
+                for (int i = 0; i < byDim.size(); ) {                       // имена — вперёд всего, кадрами по измерению
+                    String dim = byDim.get(i).dim();
+                    List<TeamNet.TopoRec> l = new ArrayList<>();
+                    while (i < byDim.size() && byDim.get(i).dim().equals(dim) && l.size() < TeamNet.MAX_TOPO_PUSH) {
+                        l.add(byDim.get(i++).rec());
+                    }
+                    mine.frames.add(new TeamNet.TopoPush(team, dim, -1, l, List.of()));
+                }
                 for (int i = 0; i < found.size(); ) {                       // находки — вперёд карты, кадрами по измерению
                     String dim = found.get(i).dim();
                     List<TeamNet.FindRec> l = new ArrayList<>();
@@ -364,6 +377,64 @@ public final class TeamSync {
             if (accepted.isEmpty()) return;
             TeamNet.FindPush push = new TeamNet.FindPush(team, dim, accepted);
             server.execute(() -> relay(team, from, push));
+        });
+    }
+
+    /**
+     * Имена местности: те же проверки, что у карты, свой темп. На диск — до ответа и рассылки (сервер не подтверждает
+     * того, чего после падения у него не окажется). Отправителю — ответ с номером запроса (и отказы: квота, проверка),
+     * товарищам с протоколом ≥ 2 — свежее. Команда и сессия перепроверяются перед отправкой.
+     */
+    public void topoUp(ServerPlayer p, TeamNet.TopoUp msg) {
+        Session s = sessions.get(p.getUUID());
+        UUID team = s == null ? null : s.team;
+        if (team == null || msg.recs().isEmpty() || !team.equals(partyNow(p)) || !TeamServer.get().topo(p.getUUID())) return;
+        ResourceLocation dimId = ResourceLocation.tryParse(msg.dim());
+        if (dimId == null || server.getLevel(ResourceKey.create(Registries.DIMENSION, dimId)) == null) return;
+        long now = System.nanoTime();
+        s.tokens = Math.min(UP_BURST, s.tokens + (now - s.lastRefill) / 1e9 * UP_RATE);
+        s.lastRefill = now;
+        int cost = msg.recs().size() * 8;                                   // имена дороже чанков: их мало
+        if (s.tokens < cost || s.inflight.get() >= MAX_INFLIGHT) {
+            return;                                                         // не сейчас: без ответа — клиент повторит по таймауту
+        }
+        s.tokens -= cost;
+        s.inflight.incrementAndGet();
+        UUID from = p.getUUID();
+        String dim = dimId.toString();
+        Path dir = teamDir(team);
+        io.execute(() -> {
+            List<TeamNet.TopoRec> result = new ArrayList<>();
+            List<String> rejected = new ArrayList<>();
+            try {
+                TeamStore st = store(team, dir);
+                for (TeamNet.TopoRec r : msg.recs()) {
+                    var got = r.sane() ? st.acceptTopo(dim, r, from) : null;
+                    if (got != null) result.add(got);
+                    else if (rejected.size() < TeamNet.MAX_TOPO_REJECT) rejected.add(r.id());
+                }
+                try {
+                    st.flushTopos();
+                } catch (Exception ex) {
+                    Pergament.LOG.warn("Пергамент: имена команды не записаны: {}", ex.toString());
+                    return;                                                  // без записи — ни ответа, ни рассылки (клиент повторит)
+                }
+            } finally {
+                s.inflight.decrementAndGet();
+            }
+            server.execute(() -> {
+                ServerPlayer me = server.getPlayerList().getPlayer(from);
+                if (me == null || sessions.get(from) != s || !team.equals(partyNow(me))) return;   // сменил команду — мимо
+                send(me, new TeamNet.TopoPush(team, dim, msg.req(), result, rejected));
+                if (!result.isEmpty()) {
+                    TeamNet.TopoPush push = new TeamNet.TopoPush(team, dim, -1, result, List.of());
+                    for (var en : sessions.entrySet()) {
+                        if (en.getKey().equals(from) || !team.equals(en.getValue().team) || !TeamServer.get().topo(en.getKey())) continue;
+                        ServerPlayer mate = server.getPlayerList().getPlayer(en.getKey());
+                        if (mate != null && team.equals(partyNow(mate))) send(mate, push);
+                    }
+                }
+            });
         });
     }
 

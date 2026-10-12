@@ -265,6 +265,11 @@ public class MapScreen extends Screen {
         listOpen = open;
     }
 
+    /** Самотест: окно переименования подписи. */
+    public void debugRename(ru.stef.pergament.client.geo.Toponyms.Label l) {
+        minecraft.setScreen(new TopoRenameScreen(this, l));
+    }
+
     /** Самотест: левый список на вкладке «Руды» (или закрыть). */
     public static void oresForTest(boolean open) {
         listOpen = open;
@@ -331,6 +336,11 @@ public class MapScreen extends Screen {
         var mk = free ? MarkerOverlay.hovered(this, markList, mouseX, mouseY) : null;
         if (mk != null) {
             MarkerOverlay.drawTip(g, font, this, mk, mouseX, mouseY);
+            return;
+        }
+        var lab = free && tool == Tool.NONE ? TopoOverlay.at(mouseX, mouseY) : null;
+        if (lab != null) {
+            Tip.draw(g, font, List.of(TopoOverlay.name(lab), T.t("topo.click")), mouseX, mouseY, width, height);
             return;
         }
         int[] cell = free && tool == Tool.MINER && plan != null ? MinerOverlay.hovered(this, plan, mouseX, mouseY) : null;
@@ -942,6 +952,13 @@ public class MapScreen extends Screen {
             var hit = MarkerOverlay.hovered(this, marks.all(), mx, my);
             if (hit != null) {
                 openMarker(hit.copy());
+                return true;
+            }
+        }
+        if (tool == Tool.NONE) {                                           // клик по подписи местности — переименовать
+            var lab = TopoOverlay.at(mx, my);
+            if (lab != null) {
+                minecraft.setScreen(new TopoRenameScreen(this, lab));
                 return true;
             }
         }

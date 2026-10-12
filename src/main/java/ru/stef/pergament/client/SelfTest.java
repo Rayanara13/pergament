@@ -360,9 +360,28 @@ public final class SelfTest {
             mc.setScreen(new MapScreen());
             step = Step.ORES;
             onMap = 0;
-        } else if (step == Step.ORES && ++onMap == 30) {
+        } else if (step == Step.ORES && ++onMap == 10) {
+            // переименование: первую подпись — своим именем (как из окна «Переименовать»)
+            var shown = LocalMap.get().shown();
+            var labels = shown == null ? java.util.List.<ru.stef.pergament.client.geo.Toponyms.Label>of() : shown.toponymy().labels();
+            Pergament.LOG.info("SELFTEST topo labels={}", labels.size());
+            if (!labels.isEmpty()) shown.toponymy().rename(labels.get(0).itemId(), "Тестовый пруд");
+        } else if (step == Step.ORES && onMap == 25) {
+            var shown = LocalMap.get().shown();
+            boolean ok = shown != null && shown.toponymy().labels().stream().anyMatch(l -> "Тестовый пруд".equals(l.custom()));
+            Pergament.LOG.info("SELFTEST topo rename={}", ok ? "ok" : "FAIL");
+        } else if (step == Step.ORES && onMap == 30) {
             Screenshot.grab(mc.gameDirectory, "pergament_ores.png", mc.getMainRenderTarget(), msg -> { });
-        } else if (step == Step.ORES && onMap >= 40) {
+        } else if (step == Step.ORES && onMap == 32 && mc.screen instanceof MapScreen ms) {
+            MapScreen.oresForTest(false);
+            ms.init(mc, ms.width, ms.height);                   // список закрыт — кнопки вкладок убрать
+            var shown = LocalMap.get().shown();
+            var labels = shown == null ? java.util.List.<ru.stef.pergament.client.geo.Toponyms.Label>of() : shown.toponymy().labels();
+            if (!labels.isEmpty()) ms.debugRename(labels.get(0));
+        } else if (step == Step.ORES && onMap == 38) {
+            Screenshot.grab(mc.gameDirectory, "pergament_rename.png", mc.getMainRenderTarget(), msg -> { });
+        } else if (step == Step.ORES && onMap >= 44) {
+            mc.setScreen(null);
             MapScreen.oresForTest(false);
             afterOverworld(mc);
         } else if (step == Step.TRAVEL && mc.player != null && mc.level != null) {

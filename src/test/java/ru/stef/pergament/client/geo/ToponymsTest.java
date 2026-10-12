@@ -103,6 +103,79 @@ class ToponymsTest {
     }
 
     @Test
+    void customNameAndTeamOrderWin() {
+        var cells = new Long2LongOpenHashMap();
+        fill(cells, Geo.LAKE, 0, 0, 2, 2, 60);
+        var reg = new Toponyms.Registry();
+        Toponyms.compute(cells, reg, "w");
+        var mine = reg.items.get(0);
+        mine.custom = "Тапкино болото";
+        var l = Toponyms.compute(cells, reg, "w").labels().get(0);
+        assertEquals("Тапкино болото", l.custom());
+        assertEquals(mine.id, l.itemId());
+        // товарищ открыл это озеро раньше (его запись — с порядком команды): его имя побеждает моё, ещё не отданное
+        var team = new Toponyms.Item();
+        team.id = "team-1";
+        team.type = Toponyms.LAKE;
+        team.nameId = "lake:7";
+        team.anchor = key(2, 2);
+        team.seq = 99;
+        team.teamSeq = 5;
+        reg.items.add(team);
+        assertEquals("team-1", Toponyms.compute(cells, reg, "w").labels().get(0).itemId());
+    }
+
+    @Test
+    void forestDesertSwampByCanopySandWater() {
+        assertEquals(Geo.FOREST, Geo.classify(Geo.NONE, 0f, 0.8f, 0f));
+        assertEquals(Geo.DESERT, Geo.classify(Geo.NONE, 0f, 0f, 0.9f));
+        assertEquals(Geo.NONE, Geo.classify(Geo.H_BEACH, 0.1f, 0f, 0.9f));     // пляж — не пустыня
+        assertEquals(Geo.SWAMP, Geo.classify(Geo.H_SWAMP, 0.3f, 0.2f, 0f));
+        assertEquals(Geo.LAKE, Geo.classify(Geo.H_SWAMP, 0.8f, 0f, 0f));
+        long v = Geo.pack(Geo.FOREST, 0.1f, 80, 1, 2, 0.75f, 0.25f);
+        assertEquals(0.75f, Geo.canopy(v), 0.01f);
+        assertEquals(0.25f, Geo.sand(v), 0.01f);
+        assertEquals(80, Geo.peakY(v));
+    }
+
+    @Test
+    void islandOnlyWhenWaterAllAround() {
+        var cells = new Long2LongOpenHashMap();
+        fill(cells, Geo.OCEAN, 0, 0, 9, 9, 40);
+        fill(cells, Geo.NONE, 4, 4, 5, 5, 70);                           // суша посреди моря
+        var r = Toponyms.compute(cells, new Toponyms.Registry(), "w");
+        assertEquals(1, r.labels().stream().filter(l -> l.type().equals(Toponyms.ISLAND)).count());
+        var open = new Long2LongOpenHashMap();
+        fill(open, Geo.OCEAN, 0, 0, 9, 9, 40);
+        fill(open, Geo.NONE, 8, 4, 9, 5, 70);                            // у края разведанного — может быть материк
+        var r2 = Toponyms.compute(open, new Toponyms.Registry(), "w");
+        assertEquals(0, r2.labels().stream().filter(l -> l.type().equals(Toponyms.ISLAND)).count());
+    }
+
+    @Test
+    void peakIsHighProminentMountain() {
+        var cells = new Long2LongOpenHashMap();
+        fill(cells, Geo.MOUNTAINS, 0, 0, 13, 13, 110);
+        cells.put(key(6, 6), Geo.pack(Geo.MOUNTAINS, 0, 160, 3, 4));
+        var r = Toponyms.compute(cells, new Toponyms.Registry(), "w");
+        var peaks = r.labels().stream().filter(l -> l.type().equals(Toponyms.PEAK)).toList();
+        assertEquals(1, peaks.size());
+        assertEquals(6 * 16 + 3, peaks.get(0).x());
+    }
+
+    @Test
+    void riverPathFollowsTheBend() {
+        var cells = new Long2LongOpenHashMap();
+        fill(cells, Geo.RIVER, 0, 0, 9, 0, 60);                          // «Г»: вдоль, потом вниз
+        fill(cells, Geo.RIVER, 9, 1, 9, 8, 60);
+        var river = Toponyms.compute(cells, new Toponyms.Registry(), "w").labels().get(0);
+        int[] p = river.path();
+        assertNotNull(p);
+        assertTrue(p.length / 2 >= 15, "путь по изгибу, а не напрямую: " + p.length / 2);
+        assertTrue(p[0] <= p[p.length - 2]);                            // слева направо
+    }
+
+    @Test
     void namesAreUniqueAndTranslated() {
         Set<String> used = new HashSet<>();
         for (int i = 0; i < 70; i++) used.add(Names.pick("river", 12345, used));

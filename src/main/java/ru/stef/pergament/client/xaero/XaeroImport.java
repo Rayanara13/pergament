@@ -291,7 +291,7 @@ public final class XaeroImport {
         for (int cz = 0; cz < 32; cz++) {
             for (int cx = 0; cx < 32; cx++) {
                 cache.clear();                                     // тинт — раз на «блок + биом» в чанке, как в скане
-                int gCols = 0, gWater = 0, gPeak = Integer.MIN_VALUE, gPx = 8, gPz = 8;
+                int gCols = 0, gWater = 0, gCanopy = 0, gSand = 0, gPeak = Integer.MIN_VALUE, gPx = 8, gPz = 8;
                 int[] votes = new int[8];
                 for (int lz = cz * 16; lz < cz * 16 + 16; lz++) {
                     int land = 0;                                  // цвет земли левее в строке — под камешком
@@ -313,10 +313,14 @@ public final class XaeroImport {
                         FluidState fs = os != null ? os.getFluidState() : s.getFluidState();
                         if (!fs.isEmpty()) {
                             if (!fs.is(FluidTags.LAVA)) gWater++;
-                        } else if (h > gPeak) {
-                            gPeak = h;
-                            gPx = lx & 15;
-                            gPz = lz & 15;
+                        } else {
+                            if (s.is(net.minecraft.tags.BlockTags.LEAVES)) gCanopy++;
+                            else if (ChunkScanner.sand(s)) gSand++;
+                            if (h > gPeak) {
+                                gPeak = h;
+                                gPx = lx & 15;
+                                gPz = lz & 15;
+                            }
                         }
                         if (!fs.isEmpty()) {
                             int top = os != null ? t : h;
@@ -344,9 +348,9 @@ public final class XaeroImport {
                 if (gCols >= 64) {                                 // чанк разведан хотя бы на четверть — местность
                     byte b = 0;
                     for (byte k = 1; k < votes.length; k++) if (votes[k] > votes[b]) b = k;
-                    float w = gWater / (float) gCols;
+                    float w = gWater / (float) gCols, cn = gCanopy / (float) gCols, sd = gSand / (float) gCols;
                     geo.put(Toponyms.key((xr.rx << 5) + cx, (xr.rz << 5) + cz),
-                            Geo.pack(Geo.classify(b, w), w, gPeak == Integer.MIN_VALUE ? 63 : gPeak, gPx, gPz));
+                            Geo.pack(Geo.classify(b, w, cn, sd), w, gPeak == Integer.MIN_VALUE ? 63 : gPeak, gPx, gPz, cn, sd));
                 }
             }
         }

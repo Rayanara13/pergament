@@ -74,6 +74,9 @@ public final class TeamSyncClient {
         int uploadId;
         /** Регион архива целиком отправлен в пакете №… — ждёт подтверждения. */
         final Map<String, Integer> archiveSent = new HashMap<>();
+        /** Имена местности: сервер их хранит (TopoReady), счётчик тиков и номер запроса. */
+        boolean topoReady;
+        int topoTick, topoReq;
         /** Находки к отправке: {dim, FindRec | null, archiveKey | null}. */
         final ArrayDeque<Object[]> findQueue = new ArrayDeque<>();
 
@@ -93,7 +96,7 @@ public final class TeamSyncClient {
 
     private static volatile Session cur;
     /** Счётчики для самотеста и окна. */
-    public static volatile int sentLive, sentArchive, gotChunks, applied, sentFinds, gotFinds;
+    public static volatile int sentLive, sentArchive, gotChunks, applied, sentFinds, gotFinds, sentTopos, gotTopos;
 
     private TeamSyncClient() {}
 
@@ -155,6 +158,40 @@ public final class TeamSyncClient {
         int n = 0;
         for (TeamNet.FindRec r : p.finds()) if (target.applyOnce(r.eid(), toFind(r))) n++;
         gotFinds += n;
+    }
+
+    /** Сервер хранит имена местности команды — можно отдавать свои. */
+    public static void onTopoReady(UUID t) {
+        Session s = cur;
+        if (s != null && s.team.equals(t)) {
+            s.topoReady = true;
+            Pergament.LOG.info("Пергамент: сервер хранит имена местности команды");
+        }
+    }
+
+    /** Имена команды: в слой измерения (открытого — в его подписи, остальных — в файл слоя). */
+    public static void onTopoPush(TeamNet.TopoPush p) {
+        Session s = cur;
+        if (s == null || !s.team.equals(p.team())) return;              // запоздавшее от прежней команды — мимо
+        DimMap live = LocalMap.get().live(), shown = LocalMap.get().shown();
+        if (live != null && p.dim().equals(live.dimension())) live.toponymy().mergeTeam(p.team(), p);
+        else if (shown != null && p.dim().equals(shown.dimension())) shown.toponymy().mergeTeam(p.team(), p);
+        else ru.stef.pergament.client.map.Toponymy.mergeTeamFile(WorldProfile.dir(s.profile, p.dim()), p.team(), p);
+        gotTopos += p.recs().size();
+    }
+
+    /** Раз в 2 с: свои новые имена и переименования живого измерения — команде (пакетом, с номером запроса). */
+    private static void sendTopos(Session s) {
+        if (!s.topoReady || ++s.topoTick % 40 != 0) return;
+        DimMap lm = LocalMap.get().live();
+        if (lm == null) return;
+        int req = ++s.topoReq;
+        String dim = lm.dimension();
+        lm.toponymy().collectOutgoing(s.team, req, recs -> {
+            if (cur != s) return;                                        // сменилась команда, пока собирали
+            TeamNet.CHANNEL.sendToServer(new TeamNet.TopoUp(req, dim, recs));
+            sentTopos += recs.size();
+        });
     }
 
     /** Своя находка (событие до слияния в жилу) — команде. */
@@ -360,6 +397,7 @@ public final class TeamSyncClient {
         }
         sendLive(s);
         sendFinds(s);
+        sendTopos(s);
         sendArchive(s);
     }
 

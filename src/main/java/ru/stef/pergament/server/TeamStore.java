@@ -70,6 +70,20 @@ public final class TeamStore {
     private final Map<String, StoredFind> finds = new LinkedHashMap<>();
     private boolean dirtyFinds;
 
+    /** Имя местности команды: в каком измерении и сама запись (teamSeq, rev, автор — назначены здесь). */
+    public record StoredTopo(String dim, ru.stef.pergament.net.TeamNet.TopoRec rec) {}
+
+    /** Файл имён: счётчики и записи. */
+    private static final class TopoFile {
+        long seq, rev;
+        List<StoredTopo> items = new ArrayList<>();
+    }
+
+    private static final int TOPO_QUOTA = 20_000;
+    private final Map<String, StoredTopo> topos = new LinkedHashMap<>();
+    private long topoSeq, topoRev;
+    private boolean dirtyTopos;
+
     private final Path dir;
     private long seq;
     private UUID incarnation = UUID.randomUUID();
@@ -98,6 +112,7 @@ public final class TeamStore {
 
     public static TeamStore open(Path dir) {
         TeamStore s = new TeamStore(dir);
+        s.loadTopos();                                               // имена — отдельно: сбой индекса карты их не трогает
         s.dirtyIndex = !Files.isRegularFile(dir.resolve("index.pgti"));   // новая карта: воплощение — на диск сразу
         try {
             s.load();
@@ -112,6 +127,64 @@ public final class TeamStore {
             s.dirtyIndex = true;
         }
         return s;
+    }
+
+    /**
+     * Имя местности от члена команды. Новое (по id) — получает порядок команды и ревизию, автор — отправитель;
+     * известное — меняется только своё имя (любой член команды может переименовать), ревизия растёт.
+     * Возвращает состояние записи у сервера (в т.ч. без изменений) или null — не принято (квота, чужое измерение).
+     */
+    public ru.stef.pergament.net.TeamNet.TopoRec acceptTopo(String dim, ru.stef.pergament.net.TeamNet.TopoRec r, UUID author) {
+        StoredTopo old = topos.get(r.id());
+        if (old != null) {
+            if (!old.dim().equals(dim)) return null;
+            var o = old.rec();
+            if (o.custom().equals(r.custom())) return o;
+            var upd = new ru.stef.pergament.net.TeamNet.TopoRec(o.id(), o.type(), o.anchor(), o.nameId(), r.custom(),
+                    o.teamSeq(), ++topoRev, o.author());
+            topos.put(o.id(), new StoredTopo(dim, upd));
+            dirtyTopos = true;
+            return upd;
+        }
+        if (topos.size() >= TOPO_QUOTA) return null;
+        var rec = new ru.stef.pergament.net.TeamNet.TopoRec(r.id(), r.type(), r.anchor(), r.nameId(), r.custom(),
+                ++topoSeq, ++topoRev, author);
+        topos.put(r.id(), new StoredTopo(dim, rec));
+        dirtyTopos = true;
+        return rec;
+    }
+
+    /** Все имена команды (по порядку открытия) — для докачки. */
+    public List<StoredTopo> topos() {
+        return new ArrayList<>(topos.values());
+    }
+
+    /** Имена — на диск (атомарно); после этого их можно подтверждать. */
+    public void flushTopos() throws IOException {
+        if (!dirtyTopos) return;
+        Files.createDirectories(dir);
+        TopoFile tf = new TopoFile();
+        tf.seq = topoSeq;
+        tf.rev = topoRev;
+        tf.items = new ArrayList<>(topos.values());
+        Path f = dir.resolve("toponyms.json"), tmp = dir.resolve("toponyms.json.tmp");
+        Files.writeString(tmp, GSON.toJson(tf), java.nio.charset.StandardCharsets.UTF_8);
+        Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        dirtyTopos = false;
+    }
+
+    private void loadTopos() {
+        Path f = dir.resolve("toponyms.json");
+        if (!Files.isRegularFile(f)) return;
+        try {
+            TopoFile tf = GSON.fromJson(Files.readString(f, java.nio.charset.StandardCharsets.UTF_8), TopoFile.class);
+            if (tf == null) return;
+            topoSeq = tf.seq;
+            topoRev = tf.rev;
+            if (tf.items != null) for (StoredTopo st : tf.items) if (st != null && st.rec() != null) topos.put(st.rec().id(), st);
+        } catch (Exception e) {
+            Pergament.LOG.warn("Пергамент: имена команды {} не прочитаны: {}", dir, e.toString());
+        }
     }
 
     /** Номер автора в индексе (16 бит хватит на любую команду). */
@@ -220,6 +293,7 @@ public final class TeamStore {
 
     /** Грязное на диск: сначала регионы и находки, потом индекс (индекс не опережает данные). */
     public void flush() throws IOException {
+        flushTopos();
         if (dirtyFinds) {
             Files.createDirectories(dir);
             Path f = dir.resolve("finds.json"), tmp = dir.resolve("finds.json.tmp");

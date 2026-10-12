@@ -209,7 +209,7 @@ final class Showcase {
             cursorAside(mc);
             Screenshot.grab(mc.gameDirectory, String.format("showcase_%02d.png", k + 1), mc.getMainRenderTarget(), msg -> { });
             Pergament.LOG.info("SHOWCASE кадр {}", k + 1);
-            return k + 1 >= 9;
+            return k + 1 >= 11;
         }
         mc.getToasts().clear();
         cursorAside(mc);
@@ -258,6 +258,16 @@ final class Showcase {
                 int[] at = landNear(home.x + 14, home.z + 14);          // на суше, лицом к дому и стаду
                 float yaw = (float) Math.toDegrees(Math.atan2(-(home.x - at[0]), home.z - at[1]));
                 standAndLook(mc, at[0], at[1], yaw, 12);
+            }
+            case 9 -> open(mc, 0.3f, cx, cz);                                   // вся облетенная местность — подписи
+            case 10 -> {                                                        // миникарта у самого крупного объекта
+                mc.setScreen(null);
+                var live = ru.stef.pergament.client.map.LocalMap.get().live();
+                var big = live == null ? null : live.toponymy().labels().stream()
+                        .filter(l -> l.path() == null && l.chunks() >= 6 && l.chunks() <= 60)
+                        .max(java.util.Comparator.comparingInt(ru.stef.pergament.client.geo.Toponyms.Label::chunks)).orElse(null);
+                Pergament.LOG.info("SHOWCASE миникарта у {}", big == null ? "—" : big.type() + " " + big.chunks());
+                if (big != null) standAndLook(mc, big.x() + 40, big.z() + 40, 135, 20);
             }
             default -> { }
         }

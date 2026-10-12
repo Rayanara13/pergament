@@ -231,5 +231,8 @@
   "pergament.ores.title": "Veins: %s",
   "pergament.ores.search_hint": "Search ore…",
   "pergament.ores.empty": "No confirmed veins yet",
-  "pergament.set.toponyms": "Place names"
+  "pergament.set.toponyms": "Place names",
+  "pergament.topo.rename": "Rename",
+  "pergament.topo.reset": "Original",
+  "pergament.topo.click": "click to rename"
 }

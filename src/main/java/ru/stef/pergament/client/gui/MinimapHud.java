@@ -81,6 +81,11 @@ public final class MinimapHud implements IGuiOverlay {
                 pose.popPose();
             }
         }
+        var liveMap = LocalMap.get().live();
+        if (liveMap != null && PergamentConfig.TOPONYMS.get()) {            // подписи — мельче и только крупное
+            TopoOverlay.drawMini(g, mc.font, new TopoOverlay.View(wx -> cxs + (wx - px) * zoom, wz -> cys + (wz - pz) * zoom,
+                    zoom, x0, y0, x1, y1), liveMap.toponymy().labels(15_000));
+        }
         var route = ru.stef.pergament.client.route.RoutePlan.get();
         if (!route.path().isEmpty() && !LocalMap.get().viewingOther()) {
             RouteDraw.draw(g, mc.font, route, wx -> cxs + (wx - px) * zoom, wz -> cys + (wz - pz) * zoom, zoom, false);

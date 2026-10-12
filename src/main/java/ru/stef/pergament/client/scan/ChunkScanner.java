@@ -79,6 +79,15 @@ public final class ChunkScanner {
                 k -> TextureColors.block(s, level, pos.immutable()));
     }
 
+    /** Песок сверху (ванильный, TFC «sand/…», красный) — не песчаник. */
+    public static boolean sand(BlockState s) {
+        if (s.is(net.minecraft.tags.BlockTags.SAND)) return true;
+        var id = net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(s.getBlock());
+        if (id == null) return false;
+        String p = id.getPath();
+        return (p.equals("sand") || p.startsWith("sand/") || p.endsWith("_sand")) && !p.contains("stone");
+    }
+
     /** Скан без местности (измерение с потолком — разрез, не поверхность). */
     public static final long NO_GEO = Long.MIN_VALUE;
     /** Самотест (-Ppergament_bright): счётчик блоков со светлым цветом сверху. */
@@ -94,7 +103,7 @@ public final class ChunkScanner {
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         // тинт травы/листвы Minecraft усредняет по соседним колонкам — дорого; в чанке считаем раз на «блок + биом»
         java.util.Map<Object, Integer> tintCache = new java.util.HashMap<>();
-        int waterCols = 0, cols = 0, peakY = Integer.MIN_VALUE, peakLx = 8, peakLz = 8;
+        int waterCols = 0, cols = 0, canopyCols = 0, sandCols = 0, peakY = Integer.MIN_VALUE, peakLx = 8, peakLz = 8;
         int[] biomeVotes = new int[8];
         for (int lz = 0; lz < 16; lz++) {
             for (int lx = 0; lx < 16; lx++) {
@@ -160,8 +169,13 @@ public final class ChunkScanner {
                     int r = c & 0xFF, gg = (c >> 8) & 0xFF, bb = (c >> 16) & 0xFF;
                     if (r + gg + bb > 400) BRIGHT.merge(net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(s.getBlock()) + "", 1, Integer::sum);
                 }
-                if (depth > 0 || floatColor != 0) waterCols++;
-                else if (ground > peakY) { peakY = ground; peakLx = lx; peakLz = lz; }
+                if (depth > 0 || floatColor != 0) {
+                    waterCols++;
+                } else {
+                    if (s.is(net.minecraft.tags.BlockTags.LEAVES)) canopyCols++;
+                    else if (sand(s)) sandCols++;
+                    if (ground > peakY) { peakY = ground; peakLx = lx; peakLz = lz; }
+                }
             }
         }
         region.touch();
@@ -169,7 +183,8 @@ public final class ChunkScanner {
         byte biome = 0;
         for (byte b = 1; b < biomeVotes.length; b++) if (biomeVotes[b] > biomeVotes[biome]) biome = b;
         if (peakY == Integer.MIN_VALUE) peakY = level.getSeaLevel();
-        float water = waterCols / (float) cols;
-        return ru.stef.pergament.client.geo.Geo.pack(ru.stef.pergament.client.geo.Geo.classify(biome, water), water, peakY, peakLx, peakLz);
+        float water = waterCols / (float) cols, canopy = canopyCols / (float) cols, sand = sandCols / (float) cols;
+        return ru.stef.pergament.client.geo.Geo.pack(ru.stef.pergament.client.geo.Geo.classify(biome, water, canopy, sand),
+                water, peakY, peakLx, peakLz, canopy, sand);
     }
 }

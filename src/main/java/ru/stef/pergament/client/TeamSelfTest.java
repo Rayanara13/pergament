@@ -36,6 +36,22 @@ final class TeamSelfTest {
         return b.toString().trim();
     }
     private static boolean wasNear;
+    private static int bobInTeam;
+
+    /** Имена команды: одно и то же озеро (3×3 чанка) «открывается» на обоих клиентах. */
+    private static void lake(ru.stef.pergament.client.map.DimMap live) {
+        for (int z = 100; z <= 102; z++) {
+            for (int x = 100; x <= 102; x++) {
+                live.toponymy().put(ru.stef.pergament.client.geo.Toponyms.key(x, z),
+                        ru.stef.pergament.client.geo.Geo.pack(ru.stef.pergament.client.geo.Geo.LAKE, 1f, 60, 0, 0));
+            }
+        }
+    }
+
+    private static String lakeLabel(ru.stef.pergament.client.map.DimMap live) {
+        var l = live.toponymy().labels(0).stream().filter(x -> x.chunks() == 9).findFirst().orElse(null);
+        return l == null ? "-" : l.itemId() + "/" + l.nameId() + "/" + l.custom();
+    }
 
     private TeamSelfTest() {}
 
@@ -66,6 +82,19 @@ final class TeamSelfTest {
         }
         var live = ru.stef.pergament.client.map.LocalMap.get().live();
         if (!alice) {
+            if (TeamSyncClient.team() != null && live != null) {           // имена: открыл позже Alice, переименовал
+                int t = ++bobInTeam;
+                if (t == 300) lake(live);
+                if (t > 300 && t % 40 == 0) {
+                    Pergament.LOG.info("SELFTEST team bob topo label={} gotTopos={} sentTopos={}", lakeLabel(live),
+                            TeamSyncClient.gotTopos, TeamSyncClient.sentTopos);
+                }
+                if (t == 520) {
+                    var l = live.toponymy().labels(0).stream().filter(x -> x.chunks() == 9).findFirst().orElse(null);
+                    if (l != null) live.toponymy().rename(l.itemId(), "Общее озеро");
+                    Pergament.LOG.info("SELFTEST team bob renames {}", l == null ? "-" : l.itemId());
+                }
+            }
             if (inWorld > 200 && inWorld % 20 == 0) {
                 Pergament.LOG.info("SELFTEST team bob at={},{} team={} knowsPlus200={} knowsMinus200={} got={} applied={} finds={}",
                         mc.player.getBlockX(), mc.player.getBlockZ(), TeamSyncClient.team() != null,
@@ -77,6 +106,11 @@ final class TeamSelfTest {
         // находки: одна до команды (уйдёт архивом), одна в команде (живым событием)
         if (inWorld == 150 && live != null) find(live, "pergtest:pre", homeX + 30, homeZ);
         if (TeamSyncClient.team() != null && ++inTeam == 100 && live != null) find(live, "pergtest:live", homeX - 30, homeZ);
+        if (inTeam == 60 && live != null) lake(live);                       // имена: Alice открывает озеро первой
+        if (inTeam > 60 && inTeam % 40 == 0 && live != null) {
+            Pergament.LOG.info("SELFTEST team alice topo label={} sentTopos={} gotTopos={}", lakeLabel(live),
+                    TeamSyncClient.sentTopos, TeamSyncClient.gotTopos);
+        }
         if (inWorld > 200 && inWorld % 100 == 0 && live != null) {
             Pergament.LOG.info("SELFTEST team alice finds={} sentFinds={} gotFinds={}", findsText(live),
                     TeamSyncClient.sentFinds, TeamSyncClient.gotFinds);

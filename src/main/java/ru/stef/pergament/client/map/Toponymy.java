@@ -5,6 +5,7 @@ import com.google.gson.GsonBuilder;
 import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
 import net.minecraft.client.Minecraft;
 import ru.stef.pergament.Pergament;
+import ru.stef.pergament.client.geo.TeamTopo;
 import ru.stef.pergament.client.geo.Toponyms;
 
 import java.io.BufferedInputStream;
@@ -42,6 +43,14 @@ public final class Toponymy {
     private boolean loading = true, computing;
     private volatile List<Toponyms.Label> labels = List.of();
     private Toponyms.Registry reg;                                          // только поток расчёта
+    private Long2LongOpenHashMap lastSnap;                                  // только поток расчёта
+    // ---- имена команды (только поток расчёта): слой команды, свои переименования в пути, отвергнутое, отправленное
+    private TeamTopo.Overlay overlay;
+    private final java.util.Map<String, TeamTopo.Pending> pending = new java.util.HashMap<>();
+    private final java.util.Set<String> refused = new java.util.HashSet<>();
+    private final java.util.Map<String, Long> inFlight = new java.util.HashMap<>();
+    private java.util.UUID lastTeam;                                        // команда последнего расчёта (поток расчёта)
+    private java.util.UUID teamMain;                                        // команда, с которой считали (главный поток)
 
     Toponymy(Path dir, String salt) {
         this.dir = dir;
@@ -84,19 +93,29 @@ public final class Toponymy {
         return cells.size();
     }
 
-    /** Подписи для карты (последний расчёт); заодно заказать новый, если местность изменилась. */
+    /** Подписи для большой карты (последний расчёт); заодно заказать новый, если местность изменилась (раз в 3 с). */
     public List<Toponyms.Label> labels() {
+        return labels(3000);
+    }
+
+    /**
+     * Подписи; пересчёт — не чаще раза в every мс (миникарта видна всё время, а скан меняет местность постоянно:
+     * ей хватает раза в 15 с — копия таблицы чанков в главном потоке не должна дёргать кадр).
+     */
+    public List<Toponyms.Label> labels(long every) {
         long now = System.currentTimeMillis();
-        if (!loading && !computing && rev != computedRev && now - lastCompute > 3000) {
+        java.util.UUID team = ru.stef.pergament.client.TeamSyncClient.team();
+        boolean teamChanged = !java.util.Objects.equals(team, teamMain);
+        if (!loading && !computing && (rev != computedRev || teamChanged) && (now - lastCompute > every || teamChanged)) {
             Long2LongOpenHashMap snap = new Long2LongOpenHashMap(cells);
             long r = rev;
             computing = true;
+            teamMain = team;
             CALC.execute(() -> {
                 try {
-                    if (reg == null) reg = readRegistry();
-                    Toponyms.Result res = Toponyms.compute(snap, reg, salt);
-                    labels = res.labels();
-                    if (res.changed()) writeRegistry();
+                    lastSnap = snap;
+                    lastTeam = team;
+                    recompute();
                 } catch (RuntimeException e) {
                     Pergament.LOG.warn("Пергамент: подписи местности не посчитаны: {}", e.toString());
                 } finally {
@@ -109,6 +128,137 @@ public final class Toponymy {
             });
         }
         return labels;
+    }
+
+    /**
+     * Поток расчёта: объекты и подписи по своему реестру и слою команды (если она есть); новые имена — в свой реестр.
+     */
+    private void recompute() {
+        if (reg == null) reg = readRegistry();
+        if (overlay == null) overlay = readOverlay();
+        if (lastSnap == null) return;
+        TeamTopo.Overlay team = lastTeam == null ? null : TeamTopo.forTeam(overlay, lastTeam);
+        Toponyms.Registry view = TeamTopo.view(reg, team, lastTeam == null ? null : pending);
+        int before = view.items.size();
+        Toponyms.Result res = Toponyms.compute(lastSnap, view, salt);
+        boolean added = TeamTopo.adopt(reg, view, before);
+        labels = res.labels();
+        if (res.changed() || added) writeRegistry();
+    }
+
+    /**
+     * Своё имя объекта (null или пусто — вернуть выданное). В команде — ещё и «в пути» к серверу (до его ответа
+     * подпись показывает своё). Своя запись помнит имя и вне команды.
+     */
+    public void rename(String itemId, String custom) {
+        String name = custom == null || custom.isBlank() ? null : custom.strip();
+        CALC.execute(() -> {
+            if (reg == null) reg = readRegistry();
+            for (Toponyms.Item it : reg.items) if (itemId.equals(it.id)) it.custom = name;
+            writeRegistry();
+            if (lastTeam != null) pending.put(itemId, new TeamTopo.Pending(name == null ? "" : name));
+            recompute();
+        });
+    }
+
+    /** От сервера: имена команды этого измерения (докачка, свежее, ответ на свой запрос). */
+    public void mergeTeam(java.util.UUID team, ru.stef.pergament.net.TeamNet.TopoPush p) {
+        CALC.execute(() -> {
+            if (overlay == null) overlay = readOverlay();
+            overlay = TeamTopo.forTeam(overlay, team);
+            boolean ch = TeamTopo.merge(overlay, recs(p));
+            if (p.req() > 0) {
+                TeamTopo.acked(pending, p.req(), p.rejected(), refused);
+                for (var r : p.recs()) inFlight.remove(r.id());
+                for (String id : p.rejected()) inFlight.remove(id);
+            }
+            if (ch) writeOverlay(dir, overlay);
+            if (team.equals(lastTeam)) recompute();
+        });
+    }
+
+    /**
+     * Что отдать команде (свои имена, которых у неё нет, и переименования в пути) — не больше пакета; отмечается как
+     * отправленное с номером req. send вызывается в главном потоке, если есть что слать.
+     */
+    public void collectOutgoing(java.util.UUID team, int req, java.util.function.Consumer<List<ru.stef.pergament.net.TeamNet.TopoRec>> send) {
+        CALC.execute(() -> {
+            if (reg == null) reg = readRegistry();
+            if (overlay == null) overlay = readOverlay();
+            long now = System.currentTimeMillis();
+            var out = TeamTopo.outgoing(reg, TeamTopo.forTeam(overlay, team), pending, refused, inFlight, now, 30_000,
+                    ru.stef.pergament.net.TeamNet.MAX_TOPO_UP);
+            if (out.isEmpty()) return;
+            List<ru.stef.pergament.net.TeamNet.TopoRec> recs = new java.util.ArrayList<>();
+            for (TeamTopo.Rec r : out) {
+                TeamTopo.Pending pn = pending.get(r.id);
+                if (pn != null) {
+                    pn.req = req;
+                    pn.sentAt = now;
+                }
+                inFlight.put(r.id, now);
+                recs.add(new ru.stef.pergament.net.TeamNet.TopoRec(r.id, r.type, r.anchor, r.nameId,
+                        r.custom == null ? "" : r.custom, 0, 0, null));
+            }
+            Minecraft.getInstance().execute(() -> send.accept(recs));
+        });
+    }
+
+    /** Имена команды для неоткрытого измерения — прямо в его слой на диске (в потоке расчёта, по очереди с открытыми). */
+    public static void mergeTeamFile(Path dir, java.util.UUID team, ru.stef.pergament.net.TeamNet.TopoPush p) {
+        CALC.execute(() -> {
+            TeamTopo.Overlay o = TeamTopo.forTeam(readOverlay(dir), team);
+            if (TeamTopo.merge(o, recs(p))) writeOverlay(dir, o);
+        });
+    }
+
+    private static List<TeamTopo.Rec> recs(ru.stef.pergament.net.TeamNet.TopoPush p) {
+        List<TeamTopo.Rec> l = new java.util.ArrayList<>();
+        for (var r : p.recs()) {
+            TeamTopo.Rec t = new TeamTopo.Rec();
+            t.id = r.id();
+            t.type = r.type();
+            t.anchor = r.anchor();
+            t.nameId = r.nameId();
+            t.custom = r.custom();
+            t.teamSeq = r.teamSeq();
+            t.rev = r.rev();
+            t.author = r.author() == null ? null : r.author().toString();
+            l.add(t);
+        }
+        return l;
+    }
+
+    private TeamTopo.Overlay readOverlay() {
+        return readOverlay(dir);
+    }
+
+    private static TeamTopo.Overlay readOverlay(Path dir) {
+        Path f = dir.resolve("toponyms_team.json");
+        try {
+            if (Files.isRegularFile(f)) {
+                TeamTopo.Overlay o = GSON.fromJson(Files.readString(f, StandardCharsets.UTF_8), TeamTopo.Overlay.class);
+                if (o != null && o.items != null) {
+                    o.items.removeIf(r -> r == null || r.id == null || r.type == null || r.nameId == null);
+                    return o;
+                }
+            }
+        } catch (Exception e) {
+            Pergament.LOG.warn("Пергамент: {} не прочитан: {}", f, e.toString());
+        }
+        return new TeamTopo.Overlay();
+    }
+
+    private static void writeOverlay(Path dir, TeamTopo.Overlay o) {
+        Path f = dir.resolve("toponyms_team.json");
+        try {
+            Files.createDirectories(dir);
+            Path tmp = f.resolveSibling("toponyms_team.json.tmp");
+            Files.writeString(tmp, GSON.toJson(o), StandardCharsets.UTF_8);
+            Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (Exception e) {
+            Pergament.LOG.warn("Пергамент: {} не записан: {}", f, e.toString());
+        }
     }
 
     /** Изменившееся — на диск (поток карт, атомарно). */

@@ -231,5 +231,8 @@
   "pergament.ores.title": "Жилы: %s",
   "pergament.ores.search_hint": "Поиск руды…",
   "pergament.ores.empty": "Подтверждённых жил пока нет",
-  "pergament.set.toponyms": "Подписи местности"
+  "pergament.set.toponyms": "Подписи местности",
+  "pergament.topo.rename": "Переименовать",
+  "pergament.topo.reset": "Вернуть имя",
+  "pergament.topo.click": "клик — переименовать"
 }

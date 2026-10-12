@@ -45,6 +45,144 @@ public final class TeamNet {
         CHANNEL.registerMessage(id++, Mark.class, Mark::write, Mark::read, Mark::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(id++, FindUp.class, FindUp::write, FindUp::read, FindUp::handle, Optional.of(NetworkDirection.PLAY_TO_SERVER));
         CHANNEL.registerMessage(id++, FindPush.class, FindPush::write, FindPush::read, FindPush::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        // протокол 2 — имена местности. Только в конец: номера прежних пакетов не сдвигаются. Сервер шлёт их лишь
+        // клиентам с протоколом ≥ 2 (Hello), клиент — лишь получив TopoReady (старый сервер его не шлёт).
+        CHANNEL.registerMessage(id++, TopoReady.class, TopoReady::write, TopoReady::read, TopoReady::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(id++, TopoUp.class, TopoUp::write, TopoUp::read, TopoUp::handle, Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(id++, TopoPush.class, TopoPush::write, TopoPush::read, TopoPush::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+    }
+
+    /** Протокол клиента, с которого он понимает имена местности. */
+    public static final int TOPO_PROTOCOL = 2;
+    public static final int MAX_TOPO_UP = 64, MAX_TOPO_PUSH = 256, MAX_TOPO_REJECT = 64;
+    private static final java.util.Set<String> TOPO_TYPES = java.util.Set.of("lake", "river", "sea", "range", "volcano",
+            "forest", "desert", "swamp", "island", "peak");
+
+    /**
+     * Имя местности команды. id — UUID записи; anchor — ключ чанка; nameId — «тип:номер[:повтор]»; custom — своё имя
+     * ("" — выданное). teamSeq (кто раньше), rev (ревизия) и author — назначает сервер; от клиента не читаются.
+     */
+    public record TopoRec(String id, String type, long anchor, String nameId, String custom, long teamSeq, long rev, UUID author) {
+        void write(FriendlyByteBuf b) {
+            b.writeUtf(id, 40);
+            b.writeUtf(type, 12);
+            b.writeLong(anchor);
+            b.writeUtf(nameId, 24);
+            b.writeUtf(custom, 40);
+            b.writeVarLong(teamSeq);
+            b.writeVarLong(rev);
+            b.writeBoolean(author != null);
+            if (author != null) b.writeUUID(author);
+        }
+
+        static TopoRec read(FriendlyByteBuf b) {
+            String id = b.readUtf(40), type = b.readUtf(12);
+            long anchor = b.readLong();
+            String nameId = b.readUtf(24), custom = b.readUtf(40);
+            long seq = b.readVarLong(), rev = b.readVarLong();
+            UUID author = b.readBoolean() ? b.readUUID() : null;
+            return new TopoRec(id, type, anchor, nameId, custom, seq, rev, author);
+        }
+
+        /** Правдоподобна ли запись (сервер проверяет всё, что прислал клиент). */
+        public boolean sane() {
+            try {
+                UUID.fromString(id);
+            } catch (IllegalArgumentException e) {
+                return false;
+            }
+            int cx = (int) anchor, cz = (int) (anchor >>> 32);
+            return TOPO_TYPES.contains(type) && nameId.matches("[a-z]{1,10}:\\d{1,5}(:\\d{1,4})?")
+                    && custom.length() <= 40 && custom.chars().noneMatch(Character::isISOControl)
+                    && Math.abs(cx) <= 1_875_000 && Math.abs(cz) <= 1_875_000;
+        }
+    }
+
+    private static void writeTopos(FriendlyByteBuf b, List<TopoRec> l) {
+        b.writeVarInt(l.size());
+        for (TopoRec r : l) r.write(b);
+    }
+
+    private static List<TopoRec> readTopos(FriendlyByteBuf b, int max) {
+        int n = b.readVarInt();
+        if (n < 0 || n > max) throw new IllegalArgumentException("имён в пакете " + n);
+        List<TopoRec> l = new ArrayList<>(n);
+        for (int k = 0; k < n; k++) l.add(TopoRec.read(b));
+        return l;
+    }
+
+    /** Сервер → клиент: «я храню имена команды» (только протоколу ≥ 2, после TeamInfo). */
+    public record TopoReady(UUID team) {
+        void write(FriendlyByteBuf b) {
+            b.writeUUID(team);
+        }
+
+        static TopoReady read(FriendlyByteBuf b) {
+            return new TopoReady(b.readUUID());
+        }
+
+        void handle(Supplier<NetworkEvent.Context> ctx) {
+            var c = ctx.get();
+            c.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () ->
+                    ru.stef.pergament.client.TeamSyncClient.onTopoReady(team)));
+            c.setPacketHandled(true);
+        }
+    }
+
+    /** Клиент → сервер: новые имена и переименования (req — номер запроса, сервер отвечает тем же номером). */
+    public record TopoUp(int req, String dim, List<TopoRec> recs) {
+        void write(FriendlyByteBuf b) {
+            b.writeVarInt(req);
+            b.writeUtf(dim, MAX_DIM);
+            writeTopos(b, recs);
+        }
+
+        static TopoUp read(FriendlyByteBuf b) {
+            return new TopoUp(b.readVarInt(), b.readUtf(MAX_DIM), readTopos(b, MAX_TOPO_UP));
+        }
+
+        void handle(Supplier<NetworkEvent.Context> ctx) {
+            var c = ctx.get();
+            var sender = c.getSender();
+            c.enqueueWork(() -> {
+                if (sender != null) ru.stef.pergament.server.TeamSync.get().topoUp(sender, this);
+            });
+            c.setPacketHandled(true);
+        }
+    }
+
+    /**
+     * Сервер → клиент: имена команды (докачка, свежее от товарища или ответ на свой запрос req; -1 — не ответ).
+     * rejected — id записей запроса, которые сервер не принял (квота, проверка): их больше не слать.
+     */
+    public record TopoPush(UUID team, String dim, int req, List<TopoRec> recs, List<String> rejected) {
+        void write(FriendlyByteBuf b) {
+            b.writeUUID(team);
+            b.writeUtf(dim, MAX_DIM);
+            b.writeVarInt(req + 1);
+            writeTopos(b, recs);
+            b.writeVarInt(rejected.size());
+            for (String id : rejected) b.writeUtf(id, 40);
+        }
+
+        static TopoPush read(FriendlyByteBuf b) {
+            UUID team = b.readUUID();
+            String dim = b.readUtf(MAX_DIM);
+            int req = b.readVarInt() - 1;
+            List<TopoRec> recs = readTopos(b, MAX_TOPO_PUSH);
+            int n = b.readVarInt();
+            if (n < 0 || n > MAX_TOPO_REJECT) throw new IllegalArgumentException("отказов в пакете " + n);
+            List<String> rej = new ArrayList<>(n);
+            for (int k = 0; k < n; k++) rej.add(b.readUtf(40));
+            return new TopoPush(team, dim, req, recs, rej);
+        }
+
+        void handle(Supplier<NetworkEvent.Context> ctx) {
+            var c = ctx.get();
+            c.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () ->
+                    ru.stef.pergament.client.TeamSyncClient.onTopoPush(this)));
+            c.setPacketHandled(true);
+        }
     }
 
     /** Клиент → сервер: «у меня есть Пергамент». */

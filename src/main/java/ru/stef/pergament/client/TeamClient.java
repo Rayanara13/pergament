@@ -12,7 +12,8 @@ import java.util.List;
  * Сервер без мода канала не держит — тогда молчим, сокомандников нет.
  */
 public final class TeamClient {
-    public static final int PROTOCOL = 1;
+    /** 2 — имена местности команды. */
+    public static final int PROTOCOL = 2;
     private static final long STALE_MS = 5000;
     private static volatile List<TeamNet.Mate> mates = List.of();
     private static volatile long at;
