@@ -39,6 +39,8 @@ final class TopoOverlay {
             if (caps) name = name.toUpperCase(Locale.ROOT);
             if (l.type().equals(Toponyms.VOLCANO)) name = "▲ " + name;
             float scale = l.type().equals(Toponyms.SEA) ? 1.25f : l.type().equals(Toponyms.RIVER) || l.type().equals(Toponyms.VOLCANO) ? 0.85f : 1f;
+            double gs = Minecraft.getInstance().getWindow().getGuiScale();   // кратно пикселю экрана — иначе шрифт плывёт
+            scale = (float) (Math.max(1, Math.round(scale * gs)) / gs);
             int spacing = caps ? 1 : 0;
             int tw = Math.round(width(font, name, water, spacing) * scale), th = Math.round(9 * scale);
             double extent = l.sizeBlocks() * v.zoomGui();
@@ -94,6 +96,6 @@ final class TopoOverlay {
     }
 
     private static Component styled(String s, boolean italic) {
-        return italic ? Component.literal(s).withStyle(ChatFormatting.ITALIC) : Component.literal(s);
+        return Component.literal(s);                                          // без курсива: лесенка, хуже читается
     }
 }

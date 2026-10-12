@@ -44,12 +44,13 @@ public final class ChunkScanner {
     /**
      * Всё, сквозь что проходишь, — не поверхность: трава (бледный switchgrass TFC — «снег» по всему лугу), цветы,
      * лежачие камни, палки, ракушки, шишки, кусочки руды. Карта показывает землю под ними.
-     * Видны: снег (настоящий, белый), рельсы и посевы — это сведения, а не мусор.
+     * Видны: листва (в TFC она проходима, но это крона леса), снег, рельсы и посевы — это сведения, а не мусор.
      */
     public static boolean litter(BlockState s, net.minecraft.world.level.BlockGetter level, BlockPos pos) {
         if (s.isAir() || !s.getFluidState().isEmpty()) return false;
-        if (s.is(net.minecraft.tags.BlockTags.SNOW) || s.is(net.minecraft.tags.BlockTags.RAILS)
-                || s.is(net.minecraft.tags.BlockTags.CROPS)) return false;
+        // листва — поверхность, хоть сквозь неё в TFC и проходишь (без этого на карте одни стволы)
+        if (s.is(net.minecraft.tags.BlockTags.LEAVES) || s.is(net.minecraft.tags.BlockTags.SNOW)
+                || s.is(net.minecraft.tags.BlockTags.RAILS) || s.is(net.minecraft.tags.BlockTags.CROPS)) return false;
         var id = net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(s.getBlock());
         if (id != null && (id.getPath().contains("snow") || id.getPath().contains("crop"))) return false;
         try {
